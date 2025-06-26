@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>汉币 HANCOIN</title>
+  <link rel="icon" type="image/svg+xml" href="logo.svg">
+  <style>
+    :root {
+      --han-main: #a32719;
+      --han-gold: #ffd3a6;
+      --han-bronze: #c1442e;
+      --han-bg: #fdf6e3;
+      --han-ink: #181818;
+      --han-shadow: #a3271940;
+      --han-border: #a32719;
+      --han-banner: #fff6d6;
+    }
+    html, body {
+      background: linear-gradient(120deg, var(--han-bg) 65%, var(--han-gold) 100%);
+      margin: 0;
+      padding: 0;
+      font-family: "Noto Serif SC", "华文楷体", "STKaiti", "ZCOOL XiaoWei", "serif";
+      color: var(--han-ink);
+      min-height: 100vh;
+    }
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      background-image: url('logo.svg');
+      background-size: 13em;
+      background-repeat: no-repeat;
+      background-position: top right;
+    }
+    header {
+      margin-top: 2.5rem;
+      margin-bottom: 1.2rem;
+      text-align: center;
+      position: relative;
+    }
+    .han-logo {
+      width: 98px;
+      height: 98px;
+      margin-bottom: 0.6rem;
+      filter: drop-shadow(0 7px 16px var(--han-shadow));
+      background: radial-gradient(circle, #ffe6b1 70%, #ffefd6 100%);
+      border-radius: 50%;
+      border: 2px solid #c1442e33;
+    }
+    .han-title {
+      font-size: 2.5rem;
+      color: var(--han-main);
+      font-family: "Noto Serif SC", "ZCOOL XiaoWei", "华文楷体", serif;
+      letter-spacing: 0.23em;
+      font-weight: bold;
+      text-shadow: 0 2px 6px #fff7, 0 0 1px #a32719;
+      margin-bottom: 0.22em;
+    }
+    .han-subtitle {
+      font-size: 1.25rem;
+      color: var(--han-bronze);
+      font-family: "Noto Serif SC", "ZCOOL XiaoWei", "STKaiti", serif;
+      margin-bottom: 0.9em;
+      letter-spacing: 0.11em;
+      background: #fffbe8cc;
+      display: inline-block;
+      padding: 0.15em 1.2em;
+      border-radius: 1.2em;
+      border: 1.2px solid #ffd3a6;
+      box-shadow: 0 2px 8px #ffd3a625;
+    }
+    main {
+      background: var(--han-banner);
+      border: 2.7px solid var(--han-border);
+      border-radius: 22px;
+      box-shadow: 0 7px 40px var(--han-shadow);
+      padding: 2.1rem 1.7rem 1.4rem 1.7rem;
+      max-width: 510px;
+      width: 97vw;
+      margin-bottom: 2.5rem;
+      margin-top: 0.7rem;
+      position: relative;
+      z-index: 1;
+      transition: box-shadow 0.28s;
+    }
+    .han-seal {
+      position: absolute;
+      right: 14px; top: 14px;
+      width: 38px;
+      opacity: 0.35;
+      pointer-events: none;
+    }
+    .han-qiyin {
+      font-family: "华文行楷", "Noto Serif SC", "STXingkai", "serif";
+      font-size: 1.42em;
+      color: #c1442e;
+      opacity: 0.22;
+      position: absolute;
+      left: 16px; bottom: 10px;
+      letter-spacing: 0.41em;
+      pointer-events: none;
+      user-select: none;
+    }
+    label, .wallet-label {
+      font-weight: bold;
+      color: var(--han-main);
+      font-size: 1.12rem;
+      letter-spacing: 0.10em;
+      margin-left: 0.2em;
+      font-family: "Noto Serif SC", "ZCOOL XiaoWei", "华文楷体", serif;
+    }
+    input, textarea, select, button {
+      font-family: "Noto Serif SC", "华文楷体", serif;
+      font-size: 1.11rem;
+      border: 1.5px solid var(--han-bronze);
+      border-radius: 9px;
+      padding: 0.47em 0.83em;
+      background: #fffefb;
+      transition: box-shadow 0.18s;
+      margin-top: 0.22em;
+    }
+    input:focus, textarea:focus {
+      box-shadow: 0 0 0 2.5px var(--han-main);
+      outline: none;
+    }
+    button {
+      background: var(--han-main);
+      color: #fffbe8;
+      font-weight: bold;
+      border: none;
+      padding: 0.47em 1.5em;
+      margin: 0.5em 0;
+      cursor: pointer;
+      border-radius: 12px;
+      box-shadow: 0 2px 9px #a3271940;
+      font-size: 1.13em;
+      letter-spacing: 0.13em;
+      transition: background 0.16s, transform 0.16s;
+    }
+    button:active {
+      background: var(--han-bronze);
+      color: #fff;
+      transform: scale(0.97);
+    }
+    button:hover {
+      background: #c1442e;
+      color: #fff;
+    }
+    hr {
+      border: none;
+      border-top: 1.5px dashed var(--han-main);
+      margin: 1.2em 0;
+      opacity: .38;
+    }
+    .wallet-section {
+      margin-bottom: 1.3em;
+    }
+    .wallet-balance {
+      font-size: 1.28em;
+      color: var(--han-main);
+      font-family: "Noto Serif SC", "华文楷体", serif;
+      font-weight: bold;
+      margin-top: 0.1em;
+    }
+    .wallet-pubkey, .wallet-address {
+      font-family: "Fira Mono", "Menlo", "monospace";
+      font-size: 1.05em;
+      color: #a32719;
+      margin: 0.22em 0 0.65em 0;
+      background: #fff6d0;
+      border-radius: 5px;
+      padding: 0.22em 0.55em;
+      word-break: break-all;
+      border: 1px solid #ffd3a6;
+      box-shadow: 0 1px 4px #ffd3a615;
+    }
+    .action-row {
+      display: flex;
+      gap: 0.7em;
+      align-items: center;
+      margin-bottom: 0.5em;
+    }
+    .han-footer {
+      color: #a32719;
+      font-family: "ZCOOL XiaoWei", "Noto Serif SC", serif;
+      letter-spacing: 0.12em;
+      font-size: 1.09em;
+      margin: 2.5em 0 0.6em 0;
+      text-align: center;
+      background: #fffbe8bb;
+      border-radius: 1em;
+      display: inline-block;
+      padding: 0.3em 1.7em;
+      border: 1px solid #ffd3a6;
+      box-shadow: 0 2px 8px #ffd3a615;
+    }
+    .han-qiyin {
+      font-family: "华文行楷", "Noto Serif SC", "STXingkai", "serif";
+      font-size: 1.42em;
+      color: #c1442e;
+      opacity: 0.22;
+      position: absolute;
+      left: 16px; bottom: 10px;
+      letter-spacing: 0.41em;
+      pointer-events: none;
+      user-select: none;
+    }
+    /* 群聊与轻社交样式 */
+    .chat-area {
+      background: #fffbe8dd;
+      border: 1.4px solid #ffd3a6;
+      border-radius: 13px;
+      margin: 1.2em 0 0 0;
+      padding: 1.1em 0.9em 0.8em 0.9em;
+      box-shadow: 0 2px 9px #ffd3a650;
+      font-size: 1.07em;
+      overflow-y: auto;
+      transition: background 0.18s;
+    }
+    .group-chat-area {
+      max-height: 380px;
+      min-height: 180px;
+      background: #fff5e5;
+      border: 2.5px solid #a32719;
+      margin: 0.6em 0 0.8em 0;
+      font-size: 1.16em;
+      box-shadow: 0 4px 24px #a3271918;
+      animation: highlight-group 1.8s cubic-bezier(.68,.03,.36,1.01);
+      scroll-behavior: smooth;
+    }
+    @keyframes highlight-group {
+      0% {box-shadow: 0 0 0 #fff;}
+      50% {box-shadow: 0 6px 36px #a3271940;}
+      100% {box-shadow: 0 4px 24px #a3271918;}
+    }
+    .group-message {
+      margin-bottom: 0.85em;
+      padding: 0.68em 0.92em;
+      border-radius: 9px;
+      background: #ffd3a620;
+      box-shadow: 0 1px 3px #ffd3a625;
+      font-family: "Noto Serif SC", "ZCOOL XiaoWei", serif;
+      color: #a32719;
+      word-break: break-all;
+      line-height: 1.63;
+      position: relative;
+    }
+    .group-message.mine {
+      background: #ffd3a655;
+      color: #2d140c;
+      font-weight: bold;
+      text-align: right;
+    }
+    .group-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #fffbe8dd;
+      border-radius: 10px 10px 0 0;
+      padding: 0.6em 1em 0.4em 1em;
+      border-bottom: 1.5px dashed #ffd3a6;
+      margin-bottom: 0;
+    }
+    .group-title {
+      font-size: 1.39em;
+      font-family: "ZCOOL XiaoWei", "Noto Serif SC", serif;
+      font-weight: bold;
+      color: #a32719;
+      letter-spacing: 0.18em;
+    }
+    .group-desc {
+      font-size: 0.97em;
+      color: #b09b8a;
+      margin-left: 1.2em;
+      font-family: "Noto Serif SC", "ZCOOL XiaoWei", serif;
+      letter-spacing: 0.06em;
+    }
+    .group-input-row {
+      display: flex;
+      margin-top: 0.7em;
+      gap: 0.7em;
+      align-items: center;
+    }
+    .group-input-row input {
+      flex: 1 1 auto;
+      min-width: 0;
+      font-size: 1.1em;
+      border-radius: 8px;
+      padding: 0.36em 0.7em;
+      background: #fffbe8;
+      border: 1.2px solid #ffd3a6;
+    }
+    .group-send-btn {
+      min-width: 75px;
+      background: var(--han-bronze);
+      color: #fff;
+      font-weight: bold;
+      border-radius: 8px;
+      font-size: 1.09em;
+      border: none;
+      box-shadow: 0 1px 4px #ffd3a630;
+      transition: background 0.14s;
+    }
+    .group-send-btn:hover {
+      background: var(--han-main);
+    }
+    /* 其它样式同前... */
+    .chat-message, .group-message {
+      margin-bottom: 0.7em;
+      padding: 0.64em 0.75em 0.64em 0.75em;
+      border-radius: 8px;
+      background: #ffd3a617;
+      box-shadow: 0 1px 3px #ffd3a640;
+      font-family: "Noto Serif SC", "ZCOOL XiaoWei", serif;
+      color: #a32719;
+      word-break: break-all;
+      line-height: 1.63;
+      position: relative;
+    }
+    .chat-message.mine, .group-message.mine {
+      background: #ffd3a655;
+      color: #2d140c;
+      font-weight: bold;
+      text-align: right;
+    }
+    @media (max-width: 700px) {
+      main { padding: 1.2rem 0.2rem 1.1rem 0.2rem; max-width:95vw;}
+      .han-qiyin { font-size: 1.09em; }
+      .han-footer { font-size: 0.99em; }
+      .group-title-row { flex-direction: column; align-items: flex-start;}
+      .group-desc { margin-left: 0; margin-top: 0.12em;}
+    }
+    @media (max-width: 460px) {
+      .han-title { font-size: 1.45rem;}
+      .han-logo { width: 62px; height: 62px;}
+      .han-seal { width: 28px;}
+      .group-title { font-size: 1.1em;}
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="logo.svg" class="han-logo" alt="汉币LOGO"/>
+    <div class="han-title">汉币 HANCOIN</div>
+    <div class="han-subtitle">极简 · 极速 · 免费 · 隐私 · 汉文化</div>
+  </header>
+  <main>
+    <img src="logo.svg" class="han-seal" alt="印章"/>
+    <div class="han-qiyin">汉币如意</div>
+    <!-- 显眼位置：顶级超级群聊，内容滚动显示 -->
+    <section class="wallet-section" style="margin-bottom:2em;">
+      <div class="group-title-row">
+        <div class="group-title">🔥 超级群聊（万人同屏）</div>
+        <div class="group-desc">安全无广告 · 极速滚动</div>
+      </div>
+      <div class="chat-area group-chat-area" id="megagroup" aria-live="polite"></div>
+      <div class="group-input-row">
+        <input id="megagroup-input" maxlength="256" autocomplete="off" placeholder="输入群聊内容（最多256字）">
+        <button class="group-send-btn" id="megagroup-send">发送</button>
+      </div>
+    </section>
+    <hr>
+    <section class="wallet-section">
+      <div class="wallet-label">账户公钥</div>
+      <div class="wallet-pubkey" id="pubkey"></div>
+      <button id="btn-genkey">生成新密钥</button>
+      <button id="btn-exportkey">导出私钥</button>
+      <input id="importkey" type="password" autocomplete="off" placeholder="粘贴私钥恢复账户" style="width:99%;margin-top:0.5em;">
+      <button id="btn-importkey">导入</button>
+    </section>
+    <hr>
+    <section class="wallet-section">
+      <div class="wallet-label">账户余额</div>
+      <div class="wallet-balance" id="balance">0</div>
+      <button id="btn-faucet">水龙头领币</button>
+    </section>
+    <hr>
+    <section class="wallet-section">
+      <div class="wallet-label">转账</div>
+      <input id="toaddr" pattern="[0-9a-fA-F]{64}" title="请输入64位十六进制公钥" placeholder="对方公钥（64位Hex）" maxlength="64" style="width:99%;margin-top:0.5em;">
+      <input id="amount" type="number" min="1" step="1" max="100000000000" placeholder="金额" style="width:99%;margin-top:0.5em;">
+      <button id="btn-transfer">转账</button>
+    </section>
+    <hr>
+    <!-- 私聊 -->
+    <section class="wallet-section">
+      <div class="wallet-label">私聊</div>
+      <div class="chat-area" id="chatarea" aria-live="polite"></div>
+      <div class="msg-input-row">
+        <input id="chat-to" placeholder="对方公钥（64位Hex）" maxlength="64" pattern="[0-9a-fA-F]{64}" title="请输入64位十六进制公钥" style="min-width:70px;width:38%">
+        <input id="chat-input" maxlength="256" autocomplete="off" placeholder="消息内容">
+        <button class="msg-send-btn" id="chat-send">发</button>
+      </div>
+    </section>
+    <hr>
+    <!-- 想说 -->
+    <section class="wallet-section">
+      <div class="wallet-label">想说 </div>
+      <div class="moment-feed" id="momentfeed" aria-live="polite"></div>
+      <div class="msg-input-row">
+        <input id="moment-input" maxlength="180" autocomplete="off" placeholder="发表想说（最多120字）">
+        <button class="msg-send-btn" id="moment-send">发布</button>
+      </div>
+    </section>
+  </main>
+  <div class="han-footer">
+    <span>© 2025 汉币 | 汉文化数字资产</span>
+  </div>
+  <script src="wallet.js"></script>
+  <script>
+    // 群聊内容自动滚动到底部
+    function scrollMegaGroupToBottom() {
+      const area = document.getElementById('megagroup');
+      if (area) area.scrollTop = area.scrollHeight;
+    }
+    // 可在群聊消息更新后调用 scrollMegaGroupToBottom()
+    // 例如在 wallet.js 的 megagroup 消息渲染后调用该函数
+  </script>
+</body>
+</html>

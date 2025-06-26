@@ -1,0 +1,15 @@
+[package]
+name = "hancoin"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+warp = "0.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+ed25519-dalek = "1"
+libp2p = { version = "0.53", features = ["gossipsub", "mdns", "tcp", "websocket"] }
+rand = "0.8"
+hex = "0.4"
+dashmap = "5"

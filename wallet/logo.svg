@@ -1,0 +1,16 @@
+<svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="60" cy="60" r="56" fill="#a32719"/>
+  <!-- 精准居中，字体大号，极简大气汉风 -->
+  <text
+    x="60"
+    y="70"
+    text-anchor="middle"
+    font-size="82"
+    font-family="serif"
+    font-weight="bold"
+    fill="#181818"
+    letter-spacing="2"
+    dominant-baseline="middle"
+    alignment-baseline="middle"
+  >Ħ</text>
+</svg>
