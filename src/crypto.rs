@@ -1,18 +1,15 @@
 use ed25519_dalek::{Keypair, PublicKey, Signature, Signer, Verifier};
-use rand::rngs::OsRng;
+use rand_core::OsRng; // 用 rand_core 提供的 OsRng
 
-/// 生成新密钥对
 pub fn generate_keypair() -> Keypair {
     let mut csprng = OsRng;
     Keypair::generate(&mut csprng)
 }
 
-/// 签名
 pub fn sign_message(keypair: &Keypair, msg: &[u8]) -> Signature {
     keypair.sign(msg)
 }
 
-/// 验证签名
 pub fn verify_signature(pubkey: &PublicKey, msg: &[u8], sig: &Signature) -> bool {
     pubkey.verify(msg, sig).is_ok()
 }

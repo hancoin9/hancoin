@@ -29,10 +29,9 @@ pub async fn build_swarm() -> Result<Swarm<Gossipsub>, Box<dyn Error>> {
     let topic = IdentTopic::new("hancoin-megagroup");
     gossipsub.subscribe(&topic)?;
 
-    // 构建 Swarm
-    let mut swarm = Swarm::with_tokio_executor(transport, gossipsub, peer_id);
+    // Swarm 用 new
+    let mut swarm = Swarm::new(transport, gossipsub, peer_id);
 
-    // 事件监听（后台任务）
     tokio::spawn(async move {
         loop {
             match swarm.select_next_some().await {

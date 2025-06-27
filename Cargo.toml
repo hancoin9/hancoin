@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-libp2p = { version = "0.52", features = ["gossipsub", "tcp", "dns", "websocket", "tokio"] }
+libp2p = { version = "0.52", features = ["gossipsub", "tcp", "dns", "websocket", "tokio", "noise", "yamux"] }
 warp = "0.3"
 futures = "0.3"
 tokio = { version = "1.38", features = ["full"] }
