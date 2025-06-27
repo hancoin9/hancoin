@@ -6,13 +6,13 @@ use std::sync::atomic::{AtomicU64, Ordering};
 pub const HAN_TOTAL_SUPPLY: u64 = 10_000_000_000 * 100_000;// 100亿
 pub fn yearly_distribution(year: u32) -> u64 {
     match year {
-        1 => TOTAL_SUPPLY * 20 / 100,
-        2 => TOTAL_SUPPLY * 10 / 100,
-        3 => TOTAL_SUPPLY * 5 / 100,
-        4 => TOTAL_SUPPLY * 3 / 100,
-        5 => TOTAL_SUPPLY * 2 / 100,
+        1 => HAN_TOTAL_SUPPLY * 20 / 100,
+        2 => HAN_TOTAL_SUPPLY * 10 / 100,
+        3 => HAN_TOTAL_SUPPLY * 5 / 100,
+        4 => HAN_TOTAL_SUPPLY * 3 / 100,
+        5 => HAN_TOTAL_SUPPLY * 2 / 100,
         6..=105 => {
-            let remaining = TOTAL_SUPPLY * 60 / 100; // 剩余60%
+            let remaining = HAN_TOTAL_SUPPLY * 60 / 100; // 剩余60%
             remaining / 100 // 100年平均分配
         }
         _ => 0,
