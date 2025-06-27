@@ -2,6 +2,7 @@ use serde::{Serialize, Deserialize};
 use dashmap::DashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+<<<<<<< HEAD
 /// HAN 总发行量（100亿 * 100_000 = 1_000_000_000_000）
 pub const HAN_TOTAL_SUPPLY: u64 = 10_000_000_000 * 100_000;
 
@@ -14,6 +15,10 @@ pub const HAN_TOTAL_SUPPLY: u64 = 10_000_000_000 * 100_000;
 /// - 第5年：2%
 /// - 第6-105年：剩余60%平均分配
 /// - 其他年份返回0
+=======
+// 极简参数：发行量、免费水龙头
+pub const HAN_TOTAL_SUPPLY: u64 = 10_000_000_000 * 100_000;// 100亿
+>>>>>>> 164e387645567593aef151eecc431e4513cd90cf
 pub fn yearly_distribution(year: u32) -> u64 {
     match year {
         1 => HAN_TOTAL_SUPPLY * 20 / 100,
