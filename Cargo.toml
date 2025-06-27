@@ -5,7 +5,6 @@ edition = "2021"
 
 [dependencies]
 libp2p = { version = "0.52", features = ["gossipsub", "tcp", "dns", "websocket", "tokio"] }
-libp2p-gossipsub = "0.52"
 warp = "0.3"
 futures = "0.3"
 tokio = { version = "1.38", features = ["full"] }
