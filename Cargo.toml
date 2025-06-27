@@ -1,15 +1,20 @@
 [package]
 name = "hancoin"
-version = "1.0.0"
+version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tokio = { version = "1", features = ["full"] }
+libp2p = { version = "0.52", features = ["gossipsub", "tcp", "dns", "websocket", "tokio"] }
+libp2p-gossipsub = "0.52"
 warp = "0.3"
+futures = "0.3"
+tokio = { version = "1.38", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-ed25519-dalek = "1"
-libp2p = { version = "0.53", features = ["gossipsub", "mdns", "tcp", "websocket"] }
-rand = "0.8"
-hex = "0.4"
 dashmap = "5"
+rand = "0.8"
+rand_core = "0.6"
+ed25519-dalek = { version = "1.0", features = ["rand_core"] }
+parking_lot = "0.12"
+log = "0.4"
+env_logger = "0.11"
