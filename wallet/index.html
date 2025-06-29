@@ -381,28 +381,40 @@
       box-shadow: 0 6px 20px #ffd3a630;
     }
 
-    /* 群聊与轻社交样式 */
-    .chat-area {
+    /* 轻社交容器样式 */
+    .social-container {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 2rem;
+    }
+
+    .social-card {
       background: #fffbe8ee;
       border: 2px solid #ffd3a6;
       border-radius: 20px;
-      margin: 1.8em 0 0 0;
-      padding: 1.8em 1.5em 1.5em 1.5em;
+      padding: 1.8em 1.5em;
       box-shadow: 0 4px 16px #ffd3a650;
-      font-size: 1.2em;
-      overflow-y: auto;
       transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
       backdrop-filter: blur(3px);
     }
 
-    .chat-area:hover {
+    .social-card:hover {
       box-shadow: 0 6px 24px #ffd3a660;
       transform: translateY(-2px);
     }
 
-    .group-chat-area {
-      max-height: 500px;
-      min-height: 250px;
+    .social-title {
+      font-size: 1.8em;
+      font-family: "ZCOOL XiaoWei", "Noto Serif SC", serif;
+      font-weight: bold;
+      color: #a32719;
+      letter-spacing: 0.25em;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 3px dashed #ffd3a6;
+    }
+
+    .chat-area, .moment-feed {
       background: #fff5e5;
       border: 4px solid #a32719;
       margin: 1em 0 1.2em 0;
@@ -410,110 +422,18 @@
       box-shadow: 0 8px 40px #a3271918;
       animation: highlight-group 2.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
       scroll-behavior: smooth;
+      max-height: 400px;
+      min-height: 200px;
+      overflow-y: auto;
     }
 
     @keyframes highlight-group {
-      0% { box-shadow: 0 0 0 #fff; }
-      50% { box-shadow: 0 12px 60px #a3271940; }
-      100% { box-shadow: 0 8px 40px #a3271918; }
+      0% { box-shadow: 0 0 0 #fff; } 
+      50% { box-shadow: 0 12px 60px #a3271940; } 
+      100% { box-shadow: 0 8px 40px #a3271918; } 
     }
 
-    .group-message {
-      margin-bottom: 1.2em;
-      padding: 1em 1.5em;
-      border-radius: 15px;
-      background: #ffd3a620;
-      box-shadow: 0 3px 6px #ffd3a625;
-      font-family: "Noto Serif SC", "ZCOOL XiaoWei", serif;
-      color: #a32719;
-      word-break: break-all;
-      line-height: 1.8;
-      position: relative;
-      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    }
-
-    .group-message:hover {
-      transform: translateX(3px);
-      box-shadow: 0 4px 8px #ffd3a630;
-    }
-
-    .group-message.mine {
-      background: #ffd3a655;
-      color: #2d140c;
-      font-weight: bold;
-      text-align: right;
-      transform: translateX(-3px);
-    }
-
-    .group-message.mine:hover {
-      transform: translateX(-5px);
-    }
-
-    .group-title-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background: #fffbe8ee;
-      border-radius: 20px 20px 0 0;
-      padding: 1em 2em 0.8em 2em;
-      border-bottom: 3px dashed #ffd3a6;
-      margin-bottom: 0;
-      backdrop-filter: blur(3px);
-    }
-
-    .group-title {
-      font-size: 1.8em;
-      font-family: "ZCOOL XiaoWei", "Noto Serif SC", serif;
-      font-weight: bold;
-      color: #a32719;
-      letter-spacing: 0.25em;
-    }
-
-    .group-desc {
-      font-size: 1.2em;
-      color: #b09b8a;
-      margin-left: 2em;
-      font-family: "Noto Serif SC", "ZCOOL XiaoWei", serif;
-      letter-spacing: 0.1em;
-    }
-
-    .group-input-row {
-      display: flex;
-      margin-top: 1.2em;
-      gap: 1.2em;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-
-    .group-input-row input {
-      flex: 1 1 auto;
-      min-width: 0;
-      font-size: 1.3em;
-      border-radius: 12px;
-      padding: 0.5em 1em;
-      background: #fffbe8;
-      border: 2px solid #ffd3a6;
-    }
-
-    .group-send-btn {
-      min-width: 100px;
-      background: var(--han-bronze);
-      color: #fff;
-      font-weight: bold;
-      border-radius: 12px;
-      font-size: 1.3em;
-      border: none;
-      box-shadow: 0 3px 8px #ffd3a630;
-      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    }
-
-    .group-send-btn:hover {
-      background: var(--han-main);
-      transform: translateY(-2px);
-      box-shadow: 0 5px 12px #a3271940;
-    }
-
-    .chat-message, .group-message {
+    .chat-message, .group-message, .moment-item {
       margin-bottom: 1.2em;
       padding: 1em 1.3em;
       border-radius: 13px;
@@ -527,7 +447,7 @@
       transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
 
-    .chat-message:hover, .group-message:hover {
+    .chat-message:hover, .group-message:hover, .moment-item:hover {
       transform: translateX(3px);
       box-shadow: 0 4px 8px #ffd3a650;
     }
@@ -542,6 +462,41 @@
 
     .chat-message.mine:hover, .group-message.mine:hover {
       transform: translateX(-5px);
+    }
+
+    .input-row {
+      display: flex;
+      margin-top: 1.2em;
+      gap: 1.2em;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .input-row input, .input-row textarea {
+      flex: 1 1 auto;
+      min-width: 0;
+      font-size: 1.3em;
+      border-radius: 12px;
+      padding: 0.5em 1em;
+      background: #fffbe8;
+      border: 2px solid #ffd3a6;
+    }
+
+    .send-btn {
+      min-width: 100px;
+      background: var(--han-bronze);
+      font-weight: bold;
+      border-radius: 12px;
+      font-size: 1.3em;
+      border: none;
+      box-shadow: 0 3px 8px #ffd3a630;
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    .send-btn:hover {
+      background: var(--han-main);
+      transform: translateY(-2px);
+      box-shadow: 0 5px 12px #a3271940;
     }
 
     /* 红包样式 */
@@ -574,14 +529,14 @@
     }
 
     @keyframes shine {
-      0% { transform: rotate(0deg) translateX(-100%); }
-      100% { transform: rotate(360deg) translateX(-100%); }
+      0% { transform: rotate(0deg) translateX(-100%); } 
+      100% { transform: rotate(360deg) translateX(-100%); } 
     }
 
     @keyframes pulse {
-      0% { transform: scale(1); }
-      50% { transform: scale(1.07); }
-      100% { transform: scale(1); }
+      0% { transform: scale(1); } 
+      50% { transform: scale(1.07); } 
+      100% { transform: scale(1); } 
     }
 
     .red-envelope:hover {
@@ -648,21 +603,52 @@
       flex: 1;
     }
 
-    @media (max-width: 800px) {
-      main { padding: 3rem 1.5rem 2rem 1.5rem; max-width:90vw; }
-      .han-qiyin { font-size: 1.6em; }
-      .han-footer { font-size: 1.2em; }
-      .group-title-row { flex-direction: column; align-items: flex-start; }
-      .group-desc { margin-left: 0; margin-top: 0.3em; }
+    .main-section {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 2rem;
     }
 
-    @media (max-width: 500px) {
-      .han-title { font-size: 2.2rem; }
-      .han-logo { width: 120px; height: 120px; }
-      .han-seal { width: 50px; }
-      .group-title { font-size: 1.5em; }
-      input, textarea, select, button { font-size: 1.2rem; }
+    .section-card {
+      background: var(--han-paper);
+      border: 2px solid var(--han-border);
+      border-radius: 20px;
+      padding: 2rem;
+      box-shadow: 0 4px 16px var(--han-shadow);
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
+
+    .section-card:hover {
+      box-shadow: 0 6px 24px var(--han-shadow);
+      transform: translateY(-2px);
+    }
+
+    .section-title {
+      font-size: 1.8rem;
+      color: var(--han-main);
+      font-family: "Noto Serif SC", "ZCOOL XiaoWei", serif;
+      font-weight: bold;
+      letter-spacing: 0.2em;
+      margin-bottom: 1.5rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 3px dashed var(--han-main);
+    }
+
+    @media (max-width: 800px) {
+      main { padding: 3rem 1.5rem 2rem 1.5rem; max-width:90vw; } 
+      .han-qiyin { font-size: 1.6em; } 
+      .han-footer { font-size: 1.2em; } 
+      .group-title-row { flex-direction: column; align-items: flex-start; } 
+      .group-desc { margin-left: 0; margin-top: 0.3em; } 
+    } 
+
+    @media (max-width: 500px) {
+      .han-title { font-size: 2.2rem; } 
+      .han-logo { width: 120px; height: 120px; } 
+      .han-seal { width: 50px; } 
+      .group-title { font-size: 1.5em; } 
+      input, textarea, select, button { font-size: 1.2rem; } 
+    } 
   </style>
 </head>
 <body>
@@ -674,70 +660,72 @@
   <main>
     <img src="logo.svg" class="han-seal" alt="印章"/>
     <div class="han-qiyin">汉币如意</div>
-    <!-- 显眼位置：顶级超级群聊，内容滚动显示 -->
-    <section class="wallet-section" style="margin-bottom:2em;">
-      <div class="group-title-row">
-        <div class="group-title">🔥 超级群聊（万人同屏）</div>
-        <div class="group-desc">安全无广告 · 极速滚动</div>
-        <button class="group-send-btn" id="megagroup-red-envelope">发红包</button>
+    <div class="main-section">
+      <!-- 钱包功能 -->
+      <div class="section-card">
+        <div class="section-title">钱包功能</div>
+        <section class="wallet-section">
+          <div class="wallet-label">账户公钥</div>
+          <div class="wallet-pubkey" id="pubkey"></div>
+          <button id="btn-genkey">生成新密钥</button>
+          <button id="btn-exportkey">导出私钥</button>
+          <input id="importkey" type="password" autocomplete="off" placeholder="粘贴私钥恢复账户" style="width:99%;margin-top:0.5em;">
+          <button id="btn-importkey">导入</button>
+        </section>
+        <section class="wallet-section">
+          <div class="wallet-label">账户余额</div>
+          <div class="wallet-balance" id="balance">0</div>
+        </section>
+        <section class="wallet-section">
+          <div class="wallet-label">转账</div>
+          <input id="toaddr" pattern="[0-9a-fA-F]{64}" title="请输入64位十六进制公钥" placeholder="对方公钥（64位Hex）" maxlength="64" style="width:99%;margin-top:0.5em;">
+          <input id="amount" type="number" min="1" step="1" max="100000000000" placeholder="金额" style="width:99%;margin-top:0.5em;">
+          <button id="btn-transfer">转账</button>
+        </section>
       </div>
-      <div class="chat-area group-chat-area" id="megagroup" aria-live="polite"></div>
-      <div class="group-input-row">
-        <input id="megagroup-input" maxlength="256" autocomplete="off" placeholder="输入群聊内容（最多256字）">
-        <button class="group-send-btn" id="megagroup-send">发送</button>
+      <!-- 领取水龙头 -->
+      <div class="section-card">
+        <div class="section-title">免费领取汉币</div>
+        <section class="wallet-section">
+          <button id="btn-faucet">水龙头领汉币</button>
+        </section>
       </div>
-    </section>
-    <hr>
-    <section class="wallet-section">
-      <div class="wallet-label">账户公钥</div>
-      <div class="wallet-pubkey" id="pubkey"></div>
-      <button id="btn-genkey">生成新密钥</button>
-      <button id="btn-exportkey">导出私钥</button>
-      <input id="importkey" type="password" autocomplete="off" placeholder="粘贴私钥恢复账户" style="width:99%;margin-top:0.5em;">
-      <button id="btn-importkey">导入</button>
-    </section>
-    <hr>
-    <section class="wallet-section">
-      <div class="wallet-label">账户余额</div>
-      <div class="wallet-balance" id="balance">0</div>
-      <button id="btn-faucet">水龙头领币</button>
-    </section>
-    <hr>
-    <section class="wallet-section">
-      <div class="wallet-label">转账</div>
-      <input id="toaddr" pattern="[0-9a-fA-F]{64}" title="请输入64位十六进制公钥" placeholder="对方公钥（64位Hex）" maxlength="64" style="width:99%;margin-top:0.5em;">
-      <input id="amount" type="number" min="1" step="1" max="100000000000" placeholder="金额" style="width:99%;margin-top:0.5em;">
-      <button id="btn-transfer">转账</button>
-    </section>
-    <hr>
-    <!-- 私聊 -->
-    <section class="wallet-section">
-      <div class="wallet-label">私聊</div>
-      <div class="chat-area" id="chatarea" aria-live="polite"></div>
-      <div class="msg-input-row">
-        <input id="chat-to" placeholder="对方公钥（64位Hex）" maxlength="64" pattern="[0-9a-fA-F]{64}" title="请输入64位十六进制公钥" style="min-width:70px;width:38%">
-        <input id="chat-input" maxlength="256" autocomplete="off" placeholder="消息内容">
-        <button class="msg-send-btn" id="chat-send">发</button>
-        <button class="msg-send-btn" id="chat-red-envelope">发红包</button>
-      </div>
-    </section>
-    <hr>
-    <!-- 想说 -->
-    <section class="wallet-section">
-      <div class="wallet-label">想说 </div>
-      <div class="moment-feed" id="momentfeed" aria-live="polite"></div>
-      <div class="msg-input-row">
-        <input id="moment-input" maxlength="180" autocomplete="off" placeholder="发表想说（最多120字）">
-        <button class="msg-send-btn" id="moment-send">发布</button>
-      </div>
-    </section>
-    <!-- 打赏弹窗 -->
-    <div class="tip-modal" id="tip-modal">
-      <div class="tip-content">
-        <h3>打赏 HANCOIN</h3>
-        <input type="number" id="tip-amount" min="1" placeholder="输入打赏金额">
-        <button id="confirm-tip">确认打赏</button>
-        <button id="cancel-tip">取消</button>
+      <!-- 轻社交功能 -->
+      <div class="section-card">
+        <div class="section-title">轻社交功能</div>
+        <div class="social-container">
+          <!-- 超级群聊 -->
+          <div class="social-card">
+            <div class="social-title">🔥 超级群聊（万人同屏）</div>
+            <div class="group-desc">安全无广告 · 极速滚动</div>
+            <div class="chat-area group-chat-area" id="megagroup" aria-live="polite"></div>
+            <div class="input-row">
+              <input id="megagroup-input" maxlength="256" autocomplete="off" placeholder="输入群聊内容（最多256字）">
+              <button class="send-btn" id="megagroup-send">发送</button>
+              <button class="send-btn" id="megagroup-red-envelope">发红包</button>
+            </div>
+          </div>
+          <!-- 私聊 -->
+          <div class="social-card">
+            <div class="social-title">私聊</div>
+            <div class="chat-area" id="chatarea" aria-live="polite"></div>
+            <div class="input-row">
+              <input id="chat-to" placeholder="对方公钥（64位Hex）" maxlength="64" pattern="[0-9a-fA-F]{64}" title="请输入64位十六进制公钥" style="min-width:70px;width:38%">
+              <input id="chat-input" maxlength="256" autocomplete="off" placeholder="消息内容">
+              <button class="send-btn" id="chat-send">发</button>
+              <button class="send-btn" id="chat-red-envelope">发红包</button>
+            </div>
+          </div>
+          <!-- 想说 -->
+          <div class="social-card">
+            <div class="social-title">想说</div>
+            <div class="moment-feed" id="momentfeed" aria-live="polite"></div>
+            <div class="input-row">
+              <input id="moment-input" maxlength="180" autocomplete="off" placeholder="发表想说（最多120字）">
+              <button class="send-btn" id="moment-send">发布</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
     <!-- 红包弹窗 -->

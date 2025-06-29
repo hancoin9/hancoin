@@ -35,13 +35,18 @@ pub async fn build_swarm() -> Result<Swarm<Gossipsub>, Box<dyn Error>> {
         loop {
             match swarm.select_next_some().await {
                 SwarmEvent::Behaviour(GossipsubEvent::Message { message, .. }) => {
+                    // 添加消息大小限制，避免内存占用过高
+                    if message.data.len() > 1024 {
+                        eprintln!("Received message too large: {} bytes", message.data.len());
+                        continue;
+                    }
                     println!("P2P Received: {:?}", message.data);
                 }
                 SwarmEvent::NewListenAddr { address, .. } => {
                     println!("Listening on {:?}", address);
                 }
-                SwarmEvent::ConnectionClosed { .. } => {
-                    println!("Connection closed");
+                SwarmEvent::ConnectionClosed { peer_id, cause, .. } => {
+                    println!("Connection closed with peer {:?}, cause: {:?}", peer_id, cause);
                 }
                 err @ SwarmEvent::Behaviour(_) => {
                     eprintln!("P2P Swarm error: {:?}", err);

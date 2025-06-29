@@ -16,10 +16,13 @@ use warp::Filter;
 async fn main() {
     env_logger::init();
 
-    let ledger = Arc::new(Ledger {
-        accounts: DashMap::new(),
-        issued: AtomicU64::new(0),
-    });
+    let ledger = Arc::new(Ledger {        accounts: DashMap::new(),        issued: AtomicU64::new(0),    });
+
+    // 检查发行量是否超过总量
+    if ledger.issued.load(Ordering::SeqCst) >= HAN_TOTAL_SUPPLY {
+        eprintln!("Total supply has reached the limit!");
+        return;
+    }
 
     // P2P Swarm（可选）
     let _ = build_swarm().await.ok();
@@ -35,10 +38,11 @@ async fn main() {
             let ledger = ledger.clone();
             async move {
                 if let Some(account_id) = req.get("account_id").and_then(|v| v.as_str()) {
-                    let mut account = ledger.accounts.entry(account_id.to_string()).or_insert(Account::default());
-                    account.balance += 100; // 示例领取 100 个币
-                    ledger.issued.fetch_add(100, Ordering::SeqCst);
-                    Ok::<_, warp::Rejection>(warp::reply::json(&serde_json::json!({"status": "ok"})))
+                    let mut account = ledger.accounts.entry(account_id.to_string()).or_insert(Account::default());                    let new_issued = ledger.issued.load(Ordering::SeqCst) + 100;
+                    if new_issued > HAN_TOTAL_SUPPLY {
+                        return Ok(warp::reply::json(&serde_json::json!({"status": "error", "message": "Total supply limit reached"})));
+                    }
+                    account.balance += 100; // 示例领取 100 个币                    ledger.issued.fetch_add(100, Ordering::SeqCst);                    Ok::<_, warp::Rejection>(warp::reply::json(&serde_json::json!({"status": "ok"})))
                 } else {
                     Ok::<_, warp::Rejection>(warp::reply::json(&serde_json::json!({"status": "error", "message": "Missing account_id"})))
                 }
