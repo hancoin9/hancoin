@@ -22,20 +22,26 @@ async fn main() {
     });
 
     // P2P Swarm（可选）
-    let _p2p_swarm = build_swarm().await.ok();
+    let _ = build_swarm().await.ok();
 
     // WebSocket 路由
     let ws_routes = ws::chat_routes();
 
     // Faucet 路由（示例）
-    let ledger_clone = ledger.clone();
     let faucet_route = warp::path("faucet")
         .and(warp::post())
         .and(warp::body::json())
         .and_then(move |req: serde_json::Value| {
-            let _ledger = ledger_clone.clone();
+            let ledger = ledger.clone();
             async move {
-                Ok::<_, warp::Rejection>(warp::reply::json(&serde_json::json!({"status": "ok"})))
+                if let Some(account_id) = req.get("account_id").and_then(|v| v.as_str()) {
+                    let mut account = ledger.accounts.entry(account_id.to_string()).or_insert(Account::default());
+                    account.balance += 100; // 示例领取 100 个币
+                    ledger.issued.fetch_add(100, Ordering::SeqCst);
+                    Ok::<_, warp::Rejection>(warp::reply::json(&serde_json::json!({"status": "ok"})))
+                } else {
+                    Ok::<_, warp::Rejection>(warp::reply::json(&serde_json::json!({"status": "error", "message": "Missing account_id"})))
+                }
             }
         });
 

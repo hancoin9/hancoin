@@ -3,7 +3,7 @@ use dashmap::DashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// HAN 总发行量（100亿 * 100_000 = 1_000_000_000_000）
-pub const HAN_TOTAL_SUPPLY: u64 = 10_000_000_000 * 100_000;
+pub const HAN_TOTAL_SUPPLY: u64 = 1_000_000_000_000;
 
 /// 按年度返回当年分配量
 pub fn yearly_distribution(year: u32) -> u64 {

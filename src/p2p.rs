@@ -19,10 +19,9 @@ pub async fn build_swarm() -> Result<Swarm<Gossipsub>, Box<dyn Error>> {
         .boxed();
 
     // Gossipsub 配置
-    let gossipsub_config = GossipsubConfig::default();
-    let mut gossipsub = Gossipsub::new(
+    let gossipsub = Gossipsub::new(
         MessageAuthenticity::Signed(id_keys.clone()),
-        gossipsub_config,
+        GossipsubConfig::default(),
     )?;
 
     // 订阅主题
@@ -37,6 +36,15 @@ pub async fn build_swarm() -> Result<Swarm<Gossipsub>, Box<dyn Error>> {
             match swarm.select_next_some().await {
                 SwarmEvent::Behaviour(GossipsubEvent::Message { message, .. }) => {
                     println!("P2P Received: {:?}", message.data);
+                }
+                SwarmEvent::NewListenAddr { address, .. } => {
+                    println!("Listening on {:?}", address);
+                }
+                SwarmEvent::ConnectionClosed { .. } => {
+                    println!("Connection closed");
+                }
+                err @ SwarmEvent::Behaviour(_) => {
+                    eprintln!("P2P Swarm error: {:?}", err);
                 }
                 _ => {}
             }

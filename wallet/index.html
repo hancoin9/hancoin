@@ -15,328 +15,653 @@
       --han-shadow: #a3271940;
       --han-border: #a32719;
       --han-banner: #fff6d6;
+      --han-red: #e64340;
+      --han-light-gold: #fff3e0;
+      --han-paper: #fff9e6;
+      --han-stamp: #a32719;
+      --han-seal-shadow: #a3271920;
     }
+
     html, body {
-      background: linear-gradient(120deg, var(--han-bg) 65%, var(--han-gold) 100%);
+      background: linear-gradient(135deg, var(--han-bg) 50%, var(--han-gold) 120%);
       margin: 0;
       padding: 0;
-      font-family: "Noto Serif SC", "华文楷体", "STKaiti", "ZCOOL XiaoWei", "serif";
+      font-family: "Noto Serif SC", "华文楷体", "STKaiti", "ZCOOL XiaoWei", serif;
       color: var(--han-ink);
       min-height: 100vh;
+      background-image: url('logo.svg');
+      background-size: 15em;
+      background-repeat: no-repeat;
+      background-position: top 20px right 20px;
     }
+
     body {
       display: flex;
       flex-direction: column;
       align-items: center;
-      min-height: 100vh;
-      background-image: url('logo.svg');
-      background-size: 13em;
-      background-repeat: no-repeat;
-      background-position: top right;
-    }
-    header {
-      margin-top: 2.5rem;
-      margin-bottom: 1.2rem;
-      text-align: center;
       position: relative;
+      padding: 2rem 0;
     }
+
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100" opacity="0.1"><text x="50%" y="50%" font-family="Noto Serif SC" font-size="100" text-anchor="middle" fill="%23a32719">汉</text></svg>');
+      background-size: 300px;
+      background-repeat: repeat;
+      z-index: -1;
+    }
+
+    header {
+      margin-top: 3rem;
+      margin-bottom: 2rem;
+      text-align: center;
+      animation: fadeInDown 1.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    @keyframes fadeInDown {
+      0% {
+        opacity: 0;
+        transform: translateY(-40px);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
     .han-logo {
-      width: 98px;
-      height: 98px;
-      margin-bottom: 0.6rem;
-      filter: drop-shadow(0 7px 16px var(--han-shadow));
+      width: 150px;
+      height: 150px;
+      margin-bottom: 1rem;
+      filter: drop-shadow(0 12px 24px var(--han-shadow));
       background: radial-gradient(circle, #ffe6b1 70%, #ffefd6 100%);
       border-radius: 50%;
-      border: 2px solid #c1442e33;
+      border: 4px solid #c1442e33;
+      transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
+
+    .han-logo:hover {
+      transform: scale(1.1) rotate(5deg);
+    }
+
     .han-title {
-      font-size: 2.5rem;
+      font-size: 3.5rem;
       color: var(--han-main);
       font-family: "Noto Serif SC", "ZCOOL XiaoWei", "华文楷体", serif;
-      letter-spacing: 0.23em;
+      letter-spacing: 0.4em;
       font-weight: bold;
-      text-shadow: 0 2px 6px #fff7, 0 0 1px #a32719;
-      margin-bottom: 0.22em;
+      text-shadow: 
+        0 4px 12px #fff7,
+        0 0 3px #a32719;
+      margin-bottom: 0.4em;
+      position: relative;
     }
+
+    .han-title::after {
+      content: '';
+      position: absolute;
+      bottom: -8px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 60%;
+      height: 3px;
+      background: linear-gradient(90deg, transparent, var(--han-main), transparent);
+    }
+
     .han-subtitle {
-      font-size: 1.25rem;
+      font-size: 1.8rem;
       color: var(--han-bronze);
       font-family: "Noto Serif SC", "ZCOOL XiaoWei", "STKaiti", serif;
-      margin-bottom: 0.9em;
-      letter-spacing: 0.11em;
-      background: #fffbe8cc;
+      margin-bottom: 1.5em;
+      letter-spacing: 0.2em;
+      background: #fffbe8ee;
       display: inline-block;
-      padding: 0.15em 1.2em;
-      border-radius: 1.2em;
-      border: 1.2px solid #ffd3a6;
-      box-shadow: 0 2px 8px #ffd3a625;
+      padding: 0.3em 2em;
+      border-radius: 2em;
+      border: 2px solid #ffd3a6;
+      box-shadow: 0 4px 16px #ffd3a630;
+      backdrop-filter: blur(2px);
     }
+
     main {
-      background: var(--han-banner);
-      border: 2.7px solid var(--han-border);
-      border-radius: 22px;
-      box-shadow: 0 7px 40px var(--han-shadow);
-      padding: 2.1rem 1.7rem 1.4rem 1.7rem;
-      max-width: 510px;
-      width: 97vw;
-      margin-bottom: 2.5rem;
-      margin-top: 0.7rem;
+      background: var(--han-paper);
+      border: 4px solid var(--han-border);
+      border-radius: 40px;
+      box-shadow: 
+        0 15px 60px var(--han-shadow),
+        inset 0 0 20px #fff;
+      padding: 4rem 3rem 3rem 3rem;
+      max-width: 700px;
+      width: 90vw;
+      margin-bottom: 4rem;
+      margin-top: 1rem;
       position: relative;
       z-index: 1;
-      transition: box-shadow 0.28s;
+      transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      animation: fadeIn 1.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
+
+    @keyframes fadeIn {
+      0% {
+        opacity: 0;
+      }
+      100% {
+        opacity: 1;
+      }
+    }
+
+    main:hover {
+      box-shadow: 
+        0 20px 80px var(--han-shadow),
+        inset 0 0 30px #fff;
+      transform: translateY(-5px);
+    }
+
     .han-seal {
       position: absolute;
-      right: 14px; top: 14px;
-      width: 38px;
-      opacity: 0.35;
+      right: 30px;
+      top: 30px;
+      width: 60px;
+      opacity: 0.5;
       pointer-events: none;
+      filter: drop-shadow(0 0 10px var(--han-seal-shadow));
+      animation: sealFade 4s infinite alternate;
     }
+
+    @keyframes sealFade {
+      0% {
+        opacity: 0.4;
+      }
+      100% {
+        opacity: 0.6;
+      }
+    }
+
     .han-qiyin {
-      font-family: "华文行楷", "Noto Serif SC", "STXingkai", "serif";
-      font-size: 1.42em;
+      font-family: "华文行楷", "Noto Serif SC", "STXingkai", serif;
+      font-size: 2em;
       color: #c1442e;
-      opacity: 0.22;
+      opacity: 0.3;
       position: absolute;
-      left: 16px; bottom: 10px;
-      letter-spacing: 0.41em;
+      left: 30px;
+      bottom: 25px;
+      letter-spacing: 0.6em;
       pointer-events: none;
       user-select: none;
+      transform: rotate(-5deg);
     }
+
     label, .wallet-label {
       font-weight: bold;
       color: var(--han-main);
-      font-size: 1.12rem;
-      letter-spacing: 0.10em;
-      margin-left: 0.2em;
+      font-size: 1.4rem;
+      letter-spacing: 0.15em;
+      margin-left: 0.4em;
       font-family: "Noto Serif SC", "ZCOOL XiaoWei", "华文楷体", serif;
+      display: inline-block;
+      margin-bottom: 0.5em;
+      position: relative;
     }
+
+    label::after, .wallet-label::after {
+      content: '';
+      position: absolute;
+      bottom: -3px;
+      left: 0;
+      width: 100%;
+      height: 2px;
+      background: var(--han-main);
+      transform: scaleX(0.9);
+    }
+
     input, textarea, select, button {
       font-family: "Noto Serif SC", "华文楷体", serif;
-      font-size: 1.11rem;
-      border: 1.5px solid var(--han-bronze);
-      border-radius: 9px;
-      padding: 0.47em 0.83em;
+      font-size: 1.3rem;
+      border: 2px solid var(--han-bronze);
+      border-radius: 15px;
+      padding: 0.7em 1.2em;
       background: #fffefb;
-      transition: box-shadow 0.18s;
-      margin-top: 0.22em;
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      margin-top: 0.4em;
     }
+
     input:focus, textarea:focus {
-      box-shadow: 0 0 0 2.5px var(--han-main);
+      box-shadow: 0 0 0 4px var(--han-main);
       outline: none;
+      background: #fff;
     }
+
     button {
       background: var(--han-main);
       color: #fffbe8;
       font-weight: bold;
       border: none;
-      padding: 0.47em 1.5em;
-      margin: 0.5em 0;
+      padding: 0.7em 2em;
+      margin: 0.8em 0;
       cursor: pointer;
-      border-radius: 12px;
-      box-shadow: 0 2px 9px #a3271940;
-      font-size: 1.13em;
-      letter-spacing: 0.13em;
-      transition: background 0.16s, transform 0.16s;
+      border-radius: 20px;
+      box-shadow: 
+        0 4px 16px #a3271940,
+        inset 0 -3px 0 #8a2015;
+      font-size: 1.35em;
+      letter-spacing: 0.2em;
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      position: relative;
+      overflow: hidden;
     }
-    button:active {
-      background: var(--han-bronze);
-      color: #fff;
-      transform: scale(0.97);
+
+    button::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, #fff3, transparent);
+      transition: left 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
+
     button:hover {
       background: #c1442e;
       color: #fff;
+      transform: translateY(-2px);
+      box-shadow: 
+        0 6px 20px #a3271950,
+        inset 0 -3px 0 #9e3726;
     }
+
+    button:hover::before {
+      left: 100%;
+    }
+
+    button:active {
+      background: var(--han-bronze);
+      color: #fff;
+      transform: translateY(0);
+      box-shadow: 
+        0 2px 8px #a3271940,
+        inset 0 -2px 0 #8a2015;
+    }
+
     hr {
       border: none;
-      border-top: 1.5px dashed var(--han-main);
-      margin: 1.2em 0;
-      opacity: .38;
+      border-top: 3px dashed var(--han-main);
+      margin: 2em 0;
+      opacity: .5;
+      position: relative;
     }
+
+    hr::after {
+      content: '• • •';
+      position: absolute;
+      top: -12px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: var(--han-main);
+      background: var(--han-paper);
+      padding: 0 10px;
+    }
+
     .wallet-section {
-      margin-bottom: 1.3em;
+      margin-bottom: 2.5em;
+      position: relative;
+      padding: 1.5em;
+      border-radius: 20px;
+      transition: background 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
+
+    .wallet-section:hover {
+      background: #fff9;
+    }
+
     .wallet-balance {
-      font-size: 1.28em;
+      font-size: 1.7em;
       color: var(--han-main);
       font-family: "Noto Serif SC", "华文楷体", serif;
       font-weight: bold;
-      margin-top: 0.1em;
+      margin-top: 0.3em;
+      padding: 0.3em 0.8em;
+      background: #fff6;
+      border-radius: 10px;
+      display: inline-block;
+      box-shadow: inset 0 0 5px #ffd3a6;
     }
+
     .wallet-pubkey, .wallet-address {
-      font-family: "Fira Mono", "Menlo", "monospace";
-      font-size: 1.05em;
+      font-family: "Fira Mono", "Menlo", monospace;
+      font-size: 1.2em;
       color: #a32719;
-      margin: 0.22em 0 0.65em 0;
+      margin: 0.4em 0 1em 0;
       background: #fff6d0;
-      border-radius: 5px;
-      padding: 0.22em 0.55em;
+      border-radius: 10px;
+      padding: 0.4em 1em;
       word-break: break-all;
-      border: 1px solid #ffd3a6;
-      box-shadow: 0 1px 4px #ffd3a615;
+      border: 2px solid #ffd3a6;
+      box-shadow: 0 3px 8px #ffd3a620;
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
+
+    .wallet-pubkey:hover, .wallet-address:hover {
+      background: #fff3;
+      transform: translateY(-2px);
+    }
+
     .action-row {
       display: flex;
-      gap: 0.7em;
+      gap: 1.2em;
       align-items: center;
-      margin-bottom: 0.5em;
+      margin-bottom: 0.8em;
+      flex-wrap: wrap;
     }
+
     .han-footer {
       color: #a32719;
       font-family: "ZCOOL XiaoWei", "Noto Serif SC", serif;
-      letter-spacing: 0.12em;
-      font-size: 1.09em;
-      margin: 2.5em 0 0.6em 0;
+      letter-spacing: 0.2em;
+      font-size: 1.3em;
+      margin: 4em 0 2em 0;
       text-align: center;
-      background: #fffbe8bb;
-      border-radius: 1em;
+      background: #fffbe8ee;
+      border-radius: 1.5em;
       display: inline-block;
-      padding: 0.3em 1.7em;
-      border: 1px solid #ffd3a6;
-      box-shadow: 0 2px 8px #ffd3a615;
+      padding: 0.5em 2.5em;
+      border: 2px solid #ffd3a6;
+      box-shadow: 0 4px 16px #ffd3a620;
+      backdrop-filter: blur(3px);
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
-    .han-qiyin {
-      font-family: "华文行楷", "Noto Serif SC", "STXingkai", "serif";
-      font-size: 1.42em;
-      color: #c1442e;
-      opacity: 0.22;
-      position: absolute;
-      left: 16px; bottom: 10px;
-      letter-spacing: 0.41em;
-      pointer-events: none;
-      user-select: none;
+
+    .han-footer:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px #ffd3a630;
     }
+
     /* 群聊与轻社交样式 */
     .chat-area {
-      background: #fffbe8dd;
-      border: 1.4px solid #ffd3a6;
-      border-radius: 13px;
-      margin: 1.2em 0 0 0;
-      padding: 1.1em 0.9em 0.8em 0.9em;
-      box-shadow: 0 2px 9px #ffd3a650;
-      font-size: 1.07em;
+      background: #fffbe8ee;
+      border: 2px solid #ffd3a6;
+      border-radius: 20px;
+      margin: 1.8em 0 0 0;
+      padding: 1.8em 1.5em 1.5em 1.5em;
+      box-shadow: 0 4px 16px #ffd3a650;
+      font-size: 1.2em;
       overflow-y: auto;
-      transition: background 0.18s;
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      backdrop-filter: blur(3px);
     }
+
+    .chat-area:hover {
+      box-shadow: 0 6px 24px #ffd3a660;
+      transform: translateY(-2px);
+    }
+
     .group-chat-area {
-      max-height: 380px;
-      min-height: 180px;
+      max-height: 500px;
+      min-height: 250px;
       background: #fff5e5;
-      border: 2.5px solid #a32719;
-      margin: 0.6em 0 0.8em 0;
-      font-size: 1.16em;
-      box-shadow: 0 4px 24px #a3271918;
-      animation: highlight-group 1.8s cubic-bezier(.68,.03,.36,1.01);
+      border: 4px solid #a32719;
+      margin: 1em 0 1.2em 0;
+      font-size: 1.3em;
+      box-shadow: 0 8px 40px #a3271918;
+      animation: highlight-group 2.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
       scroll-behavior: smooth;
     }
+
     @keyframes highlight-group {
-      0% {box-shadow: 0 0 0 #fff;}
-      50% {box-shadow: 0 6px 36px #a3271940;}
-      100% {box-shadow: 0 4px 24px #a3271918;}
+      0% { box-shadow: 0 0 0 #fff; }
+      50% { box-shadow: 0 12px 60px #a3271940; }
+      100% { box-shadow: 0 8px 40px #a3271918; }
     }
+
     .group-message {
-      margin-bottom: 0.85em;
-      padding: 0.68em 0.92em;
-      border-radius: 9px;
+      margin-bottom: 1.2em;
+      padding: 1em 1.5em;
+      border-radius: 15px;
       background: #ffd3a620;
-      box-shadow: 0 1px 3px #ffd3a625;
+      box-shadow: 0 3px 6px #ffd3a625;
       font-family: "Noto Serif SC", "ZCOOL XiaoWei", serif;
       color: #a32719;
       word-break: break-all;
-      line-height: 1.63;
+      line-height: 1.8;
       position: relative;
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
+
+    .group-message:hover {
+      transform: translateX(3px);
+      box-shadow: 0 4px 8px #ffd3a630;
+    }
+
     .group-message.mine {
       background: #ffd3a655;
       color: #2d140c;
       font-weight: bold;
       text-align: right;
+      transform: translateX(-3px);
     }
+
+    .group-message.mine:hover {
+      transform: translateX(-5px);
+    }
+
     .group-title-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      background: #fffbe8dd;
-      border-radius: 10px 10px 0 0;
-      padding: 0.6em 1em 0.4em 1em;
-      border-bottom: 1.5px dashed #ffd3a6;
+      background: #fffbe8ee;
+      border-radius: 20px 20px 0 0;
+      padding: 1em 2em 0.8em 2em;
+      border-bottom: 3px dashed #ffd3a6;
       margin-bottom: 0;
+      backdrop-filter: blur(3px);
     }
+
     .group-title {
-      font-size: 1.39em;
+      font-size: 1.8em;
       font-family: "ZCOOL XiaoWei", "Noto Serif SC", serif;
       font-weight: bold;
       color: #a32719;
-      letter-spacing: 0.18em;
+      letter-spacing: 0.25em;
     }
+
     .group-desc {
-      font-size: 0.97em;
+      font-size: 1.2em;
       color: #b09b8a;
-      margin-left: 1.2em;
+      margin-left: 2em;
       font-family: "Noto Serif SC", "ZCOOL XiaoWei", serif;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.1em;
     }
+
     .group-input-row {
       display: flex;
-      margin-top: 0.7em;
-      gap: 0.7em;
+      margin-top: 1.2em;
+      gap: 1.2em;
       align-items: center;
+      flex-wrap: wrap;
     }
+
     .group-input-row input {
       flex: 1 1 auto;
       min-width: 0;
-      font-size: 1.1em;
-      border-radius: 8px;
-      padding: 0.36em 0.7em;
+      font-size: 1.3em;
+      border-radius: 12px;
+      padding: 0.5em 1em;
       background: #fffbe8;
-      border: 1.2px solid #ffd3a6;
+      border: 2px solid #ffd3a6;
     }
+
     .group-send-btn {
-      min-width: 75px;
+      min-width: 100px;
       background: var(--han-bronze);
       color: #fff;
       font-weight: bold;
-      border-radius: 8px;
-      font-size: 1.09em;
+      border-radius: 12px;
+      font-size: 1.3em;
       border: none;
-      box-shadow: 0 1px 4px #ffd3a630;
-      transition: background 0.14s;
+      box-shadow: 0 3px 8px #ffd3a630;
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
+
     .group-send-btn:hover {
       background: var(--han-main);
+      transform: translateY(-2px);
+      box-shadow: 0 5px 12px #a3271940;
     }
-    /* 其它样式同前... */
+
     .chat-message, .group-message {
-      margin-bottom: 0.7em;
-      padding: 0.64em 0.75em 0.64em 0.75em;
-      border-radius: 8px;
+      margin-bottom: 1.2em;
+      padding: 1em 1.3em;
+      border-radius: 13px;
       background: #ffd3a617;
-      box-shadow: 0 1px 3px #ffd3a640;
+      box-shadow: 0 3px 6px #ffd3a640;
       font-family: "Noto Serif SC", "ZCOOL XiaoWei", serif;
       color: #a32719;
       word-break: break-all;
-      line-height: 1.63;
+      line-height: 1.8;
       position: relative;
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
+
+    .chat-message:hover, .group-message:hover {
+      transform: translateX(3px);
+      box-shadow: 0 4px 8px #ffd3a650;
+    }
+
     .chat-message.mine, .group-message.mine {
       background: #ffd3a655;
       color: #2d140c;
       font-weight: bold;
       text-align: right;
+      transform: translateX(-3px);
     }
-    @media (max-width: 700px) {
-      main { padding: 1.2rem 0.2rem 1.1rem 0.2rem; max-width:95vw;}
-      .han-qiyin { font-size: 1.09em; }
-      .han-footer { font-size: 0.99em; }
-      .group-title-row { flex-direction: column; align-items: flex-start;}
-      .group-desc { margin-left: 0; margin-top: 0.12em;}
+
+    .chat-message.mine:hover, .group-message.mine:hover {
+      transform: translateX(-5px);
     }
-    @media (max-width: 460px) {
-      .han-title { font-size: 1.45rem;}
-      .han-logo { width: 62px; height: 62px;}
-      .han-seal { width: 28px;}
-      .group-title { font-size: 1.1em;}
+
+    /* 红包样式 */
+    .red-envelope {
+      background: var(--han-red);
+      color: white;
+      padding: 1em 1.5em;
+      border-radius: 15px;
+      margin: 1.2em 0;
+      cursor: pointer;
+      text-align: center;
+      box-shadow: 
+        0 6px 12px rgba(0, 0, 0, 0.2),
+        inset 0 -4px 0 #c13532;
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      animation: pulse 2.5s infinite cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .red-envelope::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: linear-gradient(45deg, transparent, #fff3, transparent);
+      animation: shine 3s infinite linear;
+    }
+
+    @keyframes shine {
+      0% { transform: rotate(0deg) translateX(-100%); }
+      100% { transform: rotate(360deg) translateX(-100%); }
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.07); }
+      100% { transform: scale(1); }
+    }
+
+    .red-envelope:hover {
+      transform: scale(1.05);
+      box-shadow: 
+        0 8px 16px rgba(0, 0, 0, 0.25),
+        inset 0 -4px 0 #c13532;
+    }
+
+    .red-envelope.opened {
+      background: var(--han-gold);
+      color: var(--han-main);
+      cursor: default;
+      box-shadow: 
+        0 4px 8px rgba(0, 0, 0, 0.1),
+        inset 0 -2px 0 #d4b28c;
+    }
+
+    .red-envelope-info {
+      font-size: 1em;
+      margin-top: 0.6em;
+    }
+
+    .red-envelope-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      backdrop-filter: blur(3px);
+    }
+
+    .red-envelope-content {
+      background: var(--han-paper);
+      padding: 2.5em;
+      border-radius: 25px;
+      text-align: center;
+      max-width: 450px;
+      animation: modalFadeIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      box-shadow: 
+        0 15px 60px rgba(0, 0, 0, 0.3),
+        inset 0 0 20px #fff;
+      position: relative;
+    }
+
+    @keyframes modalFadeIn {
+      from { opacity: 0; transform: translateY(-40px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .red-envelope-input-row {
+      display: flex;
+      gap: 1.2em;
+      margin: 1.2em 0;
+      flex-wrap: wrap;
+    }
+
+    .red-envelope-input-row input {
+      flex: 1;
+    }
+
+    @media (max-width: 800px) {
+      main { padding: 3rem 1.5rem 2rem 1.5rem; max-width:90vw; }
+      .han-qiyin { font-size: 1.6em; }
+      .han-footer { font-size: 1.2em; }
+      .group-title-row { flex-direction: column; align-items: flex-start; }
+      .group-desc { margin-left: 0; margin-top: 0.3em; }
+    }
+
+    @media (max-width: 500px) {
+      .han-title { font-size: 2.2rem; }
+      .han-logo { width: 120px; height: 120px; }
+      .han-seal { width: 50px; }
+      .group-title { font-size: 1.5em; }
+      input, textarea, select, button { font-size: 1.2rem; }
     }
   </style>
 </head>
@@ -354,6 +679,7 @@
       <div class="group-title-row">
         <div class="group-title">🔥 超级群聊（万人同屏）</div>
         <div class="group-desc">安全无广告 · 极速滚动</div>
+        <button class="group-send-btn" id="megagroup-red-envelope">发红包</button>
       </div>
       <div class="chat-area group-chat-area" id="megagroup" aria-live="polite"></div>
       <div class="group-input-row">
@@ -392,6 +718,7 @@
         <input id="chat-to" placeholder="对方公钥（64位Hex）" maxlength="64" pattern="[0-9a-fA-F]{64}" title="请输入64位十六进制公钥" style="min-width:70px;width:38%">
         <input id="chat-input" maxlength="256" autocomplete="off" placeholder="消息内容">
         <button class="msg-send-btn" id="chat-send">发</button>
+        <button class="msg-send-btn" id="chat-red-envelope">发红包</button>
       </div>
     </section>
     <hr>
@@ -404,6 +731,27 @@
         <button class="msg-send-btn" id="moment-send">发布</button>
       </div>
     </section>
+    <!-- 打赏弹窗 -->
+    <div class="tip-modal" id="tip-modal">
+      <div class="tip-content">
+        <h3>打赏 HANCOIN</h3>
+        <input type="number" id="tip-amount" min="1" placeholder="输入打赏金额">
+        <button id="confirm-tip">确认打赏</button>
+        <button id="cancel-tip">取消</button>
+      </div>
+    </div>
+    <!-- 红包弹窗 -->
+    <div class="red-envelope-modal" id="red-envelope-modal">
+      <div class="red-envelope-content">
+        <h3>发红包</h3>
+        <div class="red-envelope-input-row">
+          <input type="number" id="red-envelope-amount" placeholder="金额" min="1">
+          <input type="number" id="red-envelope-count" placeholder="份数" min="1">
+        </div>
+        <button id="send-red-envelope">确认发送</button>
+        <button id="close-red-envelope-modal">取消</button>
+      </div>
+    </div>
   </main>
   <div class="han-footer">
     <span>© 2025 汉币 | 汉文化数字资产</span>
@@ -417,6 +765,31 @@
     }
     // 可在群聊消息更新后调用 scrollMegaGroupToBottom()
     // 例如在 wallet.js 的 megagroup 消息渲染后调用该函数
+
+    // 红包相关逻辑
+    document.getElementById('megagroup-red-envelope').addEventListener('click', function() {
+      document.getElementById('red-envelope-modal').style.display = 'flex';
+    });
+
+    document.getElementById('chat-red-envelope').addEventListener('click', function() {
+      document.getElementById('red-envelope-modal').style.display = 'flex';
+    });
+
+    document.getElementById('close-red-envelope-modal').addEventListener('click', function() {
+      document.getElementById('red-envelope-modal').style.display = 'none';
+    });
+
+    document.getElementById('send-red-envelope').addEventListener('click', function() {
+      const amount = document.getElementById('red-envelope-amount').value;
+      const count = document.getElementById('red-envelope-count').value;
+      if (amount && count) {
+        // 这里需要添加实际的发送红包逻辑，与后端交互
+        alert(`发送 ${amount} HAN 的红包，共 ${count} 份`);
+        document.getElementById('red-envelope-modal').style.display = 'none';
+      } else {
+        alert('请输入金额和份数');
+      }
+    });
   </script>
 </body>
 </html>

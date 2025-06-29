@@ -2,8 +2,7 @@ use ed25519_dalek::{Keypair, PublicKey, Signature, Signer, Verifier};
 use rand_core::OsRng; // 用 rand_core 提供的 OsRng
 
 pub fn generate_keypair() -> Keypair {
-    let mut csprng = OsRng;
-    Keypair::generate(&mut csprng)
+    Keypair::generate(&mut OsRng)
 }
 
 pub fn sign_message(keypair: &Keypair, msg: &[u8]) -> Signature {
