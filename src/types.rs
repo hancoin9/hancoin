@@ -1,6 +1,6 @@
 use serde::{Serialize, Deserialize};
-use dashmap::DashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{RwLock, Arc, HashMap};
 
 /// HAN 总发行量（100亿 * 100_000 = 1_000_000_000_000）
 pub const HAN_TOTAL_SUPPLY: u64 = 1_000_000_000_000;
@@ -16,7 +16,7 @@ pub fn yearly_distribution(year: u32) -> u64 {
         6..=105 => {
             let remaining = HAN_TOTAL_SUPPLY * 60 / 100;
             remaining / 100 // 100年平均分配
-        }
+        },
         _ => 0,
     }
 }
@@ -29,7 +29,7 @@ pub struct Account {
 
 #[derive(Default)]
 pub struct Ledger {
-    pub accounts: DashMap<String, Account>,
+    pub accounts: Arc<RwLock<HashMap<String, Account>>>,
     pub issued: AtomicU64,
 }
 

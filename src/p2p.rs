@@ -29,7 +29,9 @@ pub async fn build_swarm() -> Result<Swarm<Gossipsub>, Box<dyn Error>> {
     gossipsub.subscribe(&topic)?;
 
     // Swarm 用 new
-    let mut swarm = Swarm::new(transport, gossipsub, peer_id);
+    let config = libp2p::swarm::Config::with_tokio_executor()
+        .with_idle_connection_timeout(std::time::Duration::from_secs(30));
+    let mut swarm = Swarm::new(transport, gossipsub, peer_id, config);
 
     tokio::spawn(async move {
         loop {
