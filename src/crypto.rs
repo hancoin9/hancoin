@@ -3,8 +3,7 @@ use rand::rngs::OsRng;
 
 /// 生成 Ed25519 密钥对
 pub fn generate_keypair() -> Keypair {
-    let mut csprng = OsRng;
-    Keypair::generate(&mut csprng)
+    Keypair::generate(&mut OsRng)
 }
 
 /// 签名消息

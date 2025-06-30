@@ -30,6 +30,7 @@ pub async fn start_p2p() -> Result<(), Box<dyn Error>> {
         .multiplex(YamuxConfig::default())
         .boxed();
 
+<<<<<<< HEAD
     // 4. 配置 gossipsub
     let gossipsub_config = GossipsubConfig::default();
     let mut gossipsub = Gossipsub::new(
@@ -39,6 +40,13 @@ pub async fn start_p2p() -> Result<(), Box<dyn Error>> {
     .expect("正确创建 Gossipsub");
     let topic = IdentTopic::new("hancoin-topic");
     gossipsub.subscribe(&topic).unwrap();
+=======
+    // Gossipsub 配置
+    let gossipsub = Gossipsub::new(
+        MessageAuthenticity::Signed(id_keys.clone()),
+        GossipsubConfig::default(),
+    )?;
+>>>>>>> 52136f2c8f82a31b56616d5e1c024b79a2512196
 
     // 5. 构建 mdns
     let mdns = Mdns::new(MdnsConfig::default()).await?;
@@ -46,6 +54,7 @@ pub async fn start_p2p() -> Result<(), Box<dyn Error>> {
     // 6. 组合行为体
     let mut swarm = Swarm::new(transport, gossipsub, peer_id, Default::default());
 
+<<<<<<< HEAD
     // 7. 事件循环
     loop {
         tokio::select! {
@@ -59,6 +68,29 @@ pub async fn start_p2p() -> Result<(), Box<dyn Error>> {
                     }
                     _ => {}
                 }
+=======
+    tokio::spawn(async move {
+        loop {
+            match swarm.select_next_some().await {
+                SwarmEvent::Behaviour(GossipsubEvent::Message { message, .. }) => {
+                    // 添加消息大小限制，避免内存占用过高
+                    if message.data.len() > 1024 {
+                        eprintln!("Received message too large: {} bytes", message.data.len());
+                        continue;
+                    }
+                    println!("P2P Received: {:?}", message.data);
+                }
+                SwarmEvent::NewListenAddr { address, .. } => {
+                    println!("Listening on {:?}", address);
+                }
+                SwarmEvent::ConnectionClosed { peer_id, cause, .. } => {
+                    println!("Connection closed with peer {:?}, cause: {:?}", peer_id, cause);
+                }
+                err @ SwarmEvent::Behaviour(_) => {
+                    eprintln!("P2P Swarm error: {:?}", err);
+                }
+                _ => {}
+>>>>>>> 52136f2c8f82a31b56616d5e1c024b79a2512196
             }
         }
     }
