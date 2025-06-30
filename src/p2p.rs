@@ -1,47 +1,65 @@
 use libp2p::{
     core::upgrade,
-    gossipsub::{self, Gossipsub, GossipsubConfig, GossipsubEvent, IdentTopic, MessageAuthenticity},
-    identity, noise, tcp, yamux, PeerId, Swarm, Transport,
+    gossipsub::{
+        Gossipsub, GossipsubConfig, GossipsubEvent, IdentTopic, MessageAuthenticity,
+    },
+    identity,
+    mdns::{Mdns, MdnsConfig, MdnsEvent},
+    noise::{Keypair as NoiseKeypair, NoiseConfig, X25519Spec, AuthenticKeypair},
+    swarm::{Swarm, SwarmEvent},
+    tcp::TokioTcpConfig,
+    yamux::YamuxConfig,
+    PeerId, Transport,
 };
-use libp2p::swarm::SwarmEvent;
 use std::error::Error;
+use tokio::io::{self, AsyncBufReadExt};
 
-pub async fn build_swarm() -> Result<Swarm<Gossipsub>, Box<dyn Error>> {
-    // 生成密钥
+pub async fn start_p2p() -> Result<(), Box<dyn Error>> {
+    // 1. 生成本地密钥和 PeerId
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = PeerId::from(id_keys.public());
+    println!("本地节点 PeerId: {:?}", peer_id);
 
-    // 构建加密Transport
-    let transport = tcp::tokio::Transport::new(tcp::Config::default().nodelay(true))
+    // 2. 生成 Noise 密钥用于加密
+    let noise_keys: AuthenticKeypair<_> = NoiseKeypair::<X25519Spec>::new().into_authentic(&id_keys).expect("Noise key generation failed");
+
+    // 3. 构建传输层
+    let transport = TokioTcpConfig::new()
         .upgrade(upgrade::Version::V1)
-        .authenticate(noise::Config::new(&id_keys)?)
-        .multiplex(yamux::Config::default())
+        .authenticate(NoiseConfig::xx(noise_keys).into_authenticated())
+        .multiplex(YamuxConfig::default())
         .boxed();
 
-    // Gossipsub 配置
+    // 4. 配置 gossipsub
     let gossipsub_config = GossipsubConfig::default();
     let mut gossipsub = Gossipsub::new(
         MessageAuthenticity::Signed(id_keys.clone()),
         gossipsub_config,
-    )?;
+    )
+    .expect("正确创建 Gossipsub");
+    let topic = IdentTopic::new("hancoin-topic");
+    gossipsub.subscribe(&topic).unwrap();
 
-    // 订阅主题
-    let topic = IdentTopic::new("hancoin-megagroup");
-    gossipsub.subscribe(&topic)?;
+    // 5. 构建 mdns
+    let mdns = Mdns::new(MdnsConfig::default()).await?;
 
-    // Swarm 用 new
-    let mut swarm = Swarm::new(transport, gossipsub, peer_id);
+    // 6. 组合行为体
+    let mut swarm = Swarm::new(transport, gossipsub, peer_id, Default::default());
 
-    tokio::spawn(async move {
-        loop {
-            match swarm.select_next_some().await {
-                SwarmEvent::Behaviour(GossipsubEvent::Message { message, .. }) => {
-                    println!("P2P Received: {:?}", message.data);
+    // 7. 事件循环
+    loop {
+        tokio::select! {
+            _ = io::stdin().lines().next_line() => {
+                // 用户输入处理
+            }
+            event = swarm.select_next_some() => {
+                match event {
+                    SwarmEvent::Behaviour(GossipsubEvent::Message { message, .. }) => {
+                        println!("收到消息: {:?}", String::from_utf8_lossy(&message.data));
+                    }
+                    _ => {}
                 }
-                _ => {}
             }
         }
-    });
-
-    Ok(swarm)
+    }
 }
