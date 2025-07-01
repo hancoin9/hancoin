@@ -1,14 +1,21 @@
 use ed25519_dalek::{Keypair, PublicKey, Signature, Signer, Verifier};
-use rand_core::OsRng; // 用 rand_core 提供的 OsRng
+use rand::rngs::OsRng;
 
+/// 生成 Ed25519 密钥对
 pub fn generate_keypair() -> Keypair {
     Keypair::generate(&mut OsRng)
 }
 
-pub fn sign_message(keypair: &Keypair, msg: &[u8]) -> Signature {
-    keypair.sign(msg)
+/// 签名消息
+pub fn sign_message(keypair: &Keypair, message: &[u8]) -> Signature {
+    keypair.sign(message)
 }
 
-pub fn verify_signature(pubkey: &PublicKey, msg: &[u8], sig: &Signature) -> bool {
-    pubkey.verify(msg, sig).is_ok()
+/// 验证签名
+pub fn verify_signature(
+    public_key: &PublicKey,
+    message: &[u8],
+    signature: &Signature,
+) -> bool {
+    public_key.verify(message, signature).is_ok()
 }
