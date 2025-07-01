@@ -7,8 +7,7 @@ use crate::types::*;
 use crate::p2p::*;
 use crate::ws::*;
 
-use std::sync::Arc;
-use dashmap::DashMap;
+use std::sync::{Arc, RwLock, HashMap};
 use std::sync::atomic::AtomicU64;
 use warp::Filter;
 
@@ -16,7 +15,10 @@ use warp::Filter;
 async fn main() {
     env_logger::init();
 
-    let ledger = Arc::new(Ledger {        accounts: DashMap::new(),        issued: AtomicU64::new(0),    });
+    let ledger = Arc::new(Ledger {
+        accounts: Arc::new(RwLock::new(HashMap::new())),
+        issued: AtomicU64::new(0),
+    });
 
     // 检查发行量是否超过总量
     if ledger.issued.load(Ordering::SeqCst) >= HAN_TOTAL_SUPPLY {
@@ -38,7 +40,10 @@ async fn main() {
             let ledger = ledger.clone();
             async move {
                 if let Some(account_id) = req.get("account_id").and_then(|v| v.as_str()) {
-                    let mut account = ledger.accounts.entry(account_id.to_string()).or_insert(Account::default());                    let new_issued = ledger.issued.load(Ordering::SeqCst) + 100;
+                    let ledger_clone = ledger.clone();
+                    let mut accounts = ledger_clone.accounts.write().unwrap();
+                    let account = accounts.entry(account_id.to_string()).or_insert(Account::default());
+                    let new_issued = ledger.issued.load(Ordering::SeqCst) + 100;
                     if new_issued > HAN_TOTAL_SUPPLY {
                         return Ok(warp::reply::json(&serde_json::json!({"status": "error", "message": "Total supply limit reached"})));
                     }
