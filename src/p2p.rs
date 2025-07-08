@@ -1,27 +1,34 @@
 use libp2p::{
     core::upgrade,
-    gossipsub::{
-        Gossipsub, GossipsubConfig, GossipsubEvent, IdentTopic, MessageAuthenticity,
-    },
+    gossipsub::{Gossipsub, GossipsubConfig, GossipsubEvent, IdentTopic, MessageAuthenticity},
     identity,
     mdns::{Mdns, MdnsConfig, MdnsEvent},
     noise::{Keypair as NoiseKeypair, NoiseConfig, X25519Spec, AuthenticKeypair},
-    swarm::{Swarm, SwarmEvent},
+    swarm::{Swarm, SwarmEvent, Config as SwarmConfig},
     tcp::TokioTcpConfig,
     yamux::YamuxConfig,
     PeerId, Transport,
 };
 use std::error::Error;
-use tokio::io::{self, AsyncBufReadExt};
+use std::time::Duration;
+use log::{info, warn, error};
 
+/// 启动P2P网络
 pub async fn start_p2p() -> Result<(), Box<dyn Error>> {
-    // 1. 生成本地密钥和 PeerId
+    // 1. 生成本地密钥和PeerId
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = PeerId::from(id_keys.public());
-    println!("本地节点 PeerId: {:?}", peer_id);
+    info!("Local peer ID: {:?}", peer_id);
 
-    // 2. 生成 Noise 密钥用于加密
-    let noise_keys: AuthenticKeypair<_> = NoiseKeypair::<X25519Spec>::new().into_authentic(&id_keys).expect("Noise key generation failed");
+    // 2. 生成Noise密钥用于加密
+    // 将
+    let noise_keys: AuthenticKeypair<_> = NoiseKeypair::<X25519Spec>::new()
+        .into_authentic(&id_keys)
+        .expect("Failed to generate Noise keys");
+    // 替换为
+    let noise_keys: AuthenticKeypair<_> = NoiseKeypair::<X25519Spec>::new()
+        .into_authentic(&id_keys)
+        .map_err(|e| format!("Failed to generate Noise keys: {:?}"))?;
 
     // 3. 构建传输层
     let transport = TokioTcpConfig::new()
@@ -30,75 +37,60 @@ pub async fn start_p2p() -> Result<(), Box<dyn Error>> {
         .multiplex(YamuxConfig::default())
         .boxed();
 
-<<<<<<< HEAD
-    // 4. 配置 gossipsub
-    let gossipsub_config = GossipsubConfig::default();
+    // 4. 配置gossipsub
+    let gossipsub_config = GossipsubConfig::default()
+        .with_max_transmit_size(1024)  // 消息大小限制
+        .with_flood_publish(true);
     let mut gossipsub = Gossipsub::new(
         MessageAuthenticity::Signed(id_keys.clone()),
         gossipsub_config,
     )
-    .expect("正确创建 Gossipsub");
+    .expect("Failed to create Gossipsub");
+
+    // 订阅主题
     let topic = IdentTopic::new("hancoin-topic");
-    gossipsub.subscribe(&topic).unwrap();
-=======
-    // Gossipsub 配置
-    let gossipsub = Gossipsub::new(
-        MessageAuthenticity::Signed(id_keys.clone()),
-        GossipsubConfig::default(),
-    )?;
->>>>>>> 52136f2c8f82a31b56616d5e1c024b79a2512196
+    gossipsub.subscribe(&topic).expect("Failed to subscribe to topic");
 
-    // 5. 构建 mdns
-    let mdns = Mdns::new(MdnsConfig::default()).await?;
+    // 5. 配置Swarm
+    let swarm_config = SwarmConfig::with_tokio_executor()
+        .with_idle_connection_timeout(Duration::from_secs(30))
+        .with_max_established_incoming_connections(50)
+        .with_max_established_outgoing_connections(50);
 
-<<<<<<< HEAD
-    // Swarm 用 new
-    let config = libp2p::swarm::Config::with_tokio_executor()
-        .with_idle_connection_timeout(std::time::Duration::from_secs(30));
-    let mut swarm = Swarm::new(transport, gossipsub, peer_id, config);
-=======
-    // 6. 组合行为体
-    let mut swarm = Swarm::new(transport, gossipsub, peer_id, Default::default());
->>>>>>> a3939673b2730010b48a98f21d472e711037c564
+    let mut swarm = Swarm::new(transport, gossipsub, peer_id, swarm_config);
 
-<<<<<<< HEAD
-    // 7. 事件循环
-    loop {
-        tokio::select! {
-            _ = io::stdin().lines().next_line() => {
-                // 用户输入处理
-            }
-            event = swarm.select_next_some() => {
-                match event {
-                    SwarmEvent::Behaviour(GossipsubEvent::Message { message, .. }) => {
-                        println!("收到消息: {:?}", String::from_utf8_lossy(&message.data));
-                    }
-                    _ => {}
-                }
-=======
+    // 监听地址
+    swarm.listen_on("/ip4/0.0.0.0/tcp/4001".parse()?)?;
+
+    // 6. 事件循环
     tokio::spawn(async move {
         loop {
             match swarm.select_next_some().await {
                 SwarmEvent::Behaviour(GossipsubEvent::Message { message, .. }) => {
-                    // 添加消息大小限制，避免内存占用过高
+                    // 验证消息大小
                     if message.data.len() > 1024 {
-                        eprintln!("Received message too large: {} bytes", message.data.len());
+                        warn!("Received oversized message: {} bytes", message.data.len());
                         continue;
                     }
-                    println!("P2P Received: {:?}", message.data);
-                }
+                    info!("Received P2P message: {:?}", String::from_utf8_lossy(&message.data));
+                    // 这里添加消息处理逻辑
+                },
                 SwarmEvent::NewListenAddr { address, .. } => {
-                    println!("Listening on {:?}", address);
-                }
+                    info!("Listening on {:?}", address);
+                },
+                SwarmEvent::ConnectionEstablished { peer_id, .. } => {
+                    info!("Connected to peer: {:?}", peer_id);
+                },
                 SwarmEvent::ConnectionClosed { peer_id, cause, .. } => {
-                    println!("Connection closed with peer {:?}, cause: {:?}", peer_id, cause);
-                }
-                err @ SwarmEvent::Behaviour(_) => {
-                    eprintln!("P2P Swarm error: {:?}", err);
-                }
+                    info!("Disconnected from peer: {:?}, cause: {:?}", peer_id, cause);
+                },
+                SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
+                    warn!("Failed to connect to peer {:?}: {:?}", peer_id, error);
+                },
                 _ => {}
->>>>>>> 52136f2c8f82a31b56616d5e1c024b79a2512196
             }
         }
-    }
+    });
+
+    Ok(())
 }

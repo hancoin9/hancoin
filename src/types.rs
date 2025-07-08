@@ -6,18 +6,18 @@ use std::sync::{RwLock, Arc, HashMap};
 pub const HAN_TOTAL_SUPPLY: u64 = 1_000_000_000_000;
 
 /// 按年度返回当年分配量
-pub fn yearly_distribution(year: u32) -> u64 {
+pub fn yearly_distribution(year: u32) -> Option<u64> {
     match year {
-        1 => HAN_TOTAL_SUPPLY * 20 / 100,
-        2 => HAN_TOTAL_SUPPLY * 10 / 100,
-        3 => HAN_TOTAL_SUPPLY * 5 / 100,
-        4 => HAN_TOTAL_SUPPLY * 3 / 100,
-        5 => HAN_TOTAL_SUPPLY * 2 / 100,
+        1 => HAN_TOTAL_SUPPLY.checked_mul(20)?.checked_div(100),
+        2 => HAN_TOTAL_SUPPLY.checked_mul(10)?.checked_div(100),
+        3 => HAN_TOTAL_SUPPLY.checked_mul(5)?.checked_div(100),
+        4 => HAN_TOTAL_SUPPLY.checked_mul(3)?.checked_div(100),
+        5 => HAN_TOTAL_SUPPLY.checked_mul(2)?.checked_div(100),
         6..=105 => {
-            let remaining = HAN_TOTAL_SUPPLY * 60 / 100;
-            remaining / 100 // 100年平均分配
+            let remaining = HAN_TOTAL_SUPPLY.checked_mul(60)?.checked_div(100)?;
+            remaining.checked_div(100)
         },
-        _ => 0,
+        _ => Some(0),
     }
 }
 
@@ -27,9 +27,11 @@ pub struct Account {
     pub last_claim: u64,
 }
 
+use dashmap::DashMap;
+
 #[derive(Default)]
 pub struct Ledger {
-    pub accounts: Arc<RwLock<HashMap<String, Account>>>,
+    pub accounts: Arc<DashMap<String, Account>>,
     pub issued: AtomicU64,
 }
 
@@ -48,3 +50,8 @@ pub struct Moment {
     pub timestamp: u64,
     pub signature: String,
 }
+
+/// 水龙头每日领取限额
+pub const FAUCET_DAILY_LIMIT: u64 = 100;
+/// 水龙头领取冷却时间（秒）
+pub const FAUCET_COOLDOWN: u64 = 86400; // 24小时

@@ -4,20 +4,37 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+# 网络通信
 libp2p = { version = "0.53", features = ["gossipsub", "tcp", "dns", "websocket", "tokio", "noise", "yamux"] }
 warp = "0.3.6"
+
+# 异步运行时
 futures = "0.3.30"
 tokio = { version = "1.38.1", features = ["rt-multi-thread", "net", "io-util", "macros", "sync"] }
+
+# 序列化/反序列化
 serde = { version = "1.0.203", features = ["derive"] }
 serde_json = "1.0.117"
+
+# 加密与安全
+ed25519-dalek = { version = "2.0.0", features = ["rand_core"] }
+jsonwebtoken = "8.2.0"
+hex = "0.4.3"
+
+# 随机数生成
 rand = "0.8.5"
 rand_core = "0.6.4"
-ed25519-dalek = { version = "1.0.1", features = ["rand_core"] }
+
+# 日志与错误处理
 log = "0.4.21"
 env_logger = "0.11.3"
-chrono = { version = "0.4", features = ["serde"] }
-hex = "0.4"
 thiserror = "1.0"
+
+# 数据存储
 sled = "0.34"
-futures = "0.3"
->>>>>>> a3939673b2730010b48a98f21d472e711037c564
+
+# 并发数据结构
+dashmap = "5.4.0"
+
+# 时间处理
+chrono = { version = "0.4", features = ["serde"] }
