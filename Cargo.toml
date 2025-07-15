@@ -5,21 +5,28 @@ edition = "2021"
 
 [dependencies]
 # 网络通信
-libp2p = { version = "0.53", features = ["gossipsub", "tcp", "dns", "websocket", "tokio", "noise", "yamux"] }
-warp = "0.3.6"
+libp2p = { version = "0.56.0", features = ["gossipsub", "tcp", "dns", "websocket", "tokio", "noise", "yamux", "mdns"] }
+warp = "0.3.7"
 
 # 异步运行时
-futures = "0.3.30"
-tokio = { version = "1.38.1", features = ["rt-multi-thread", "net", "io-util", "macros", "sync"] }
+futures = "0.3.31"
+tokio = { version = "1.37.0", features = ["rt-multi-thread", "net", "io-util", "macros", "sync"] }
 
 # 序列化/反序列化
-serde = { version = "1.0.203", features = ["derive"] }
-serde_json = "1.0.117"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+serde_bytes = "0.11.17"
+bincode = "2.0.0"
 
 # 加密与安全
-ed25519-dalek = { version = "2.0.0", features = ["rand_core"] }
-jsonwebtoken = "8.2.0"
+ed25519-dalek = { version = "2.1.1", features = ["rand_core"] }
+jsonwebtoken = "9.3.1"
 hex = "0.4.3"
+sha2 = "0.10.9"
+hmac = "0.12.1"
+subtle = "2.5.0"
+zeroize = "1.8.1"
+blake3 = "1.5.0"
 
 # 随机数生成
 rand = "0.8.5"
@@ -27,14 +34,42 @@ rand_core = "0.6.4"
 
 # 日志与错误处理
 log = "0.4.21"
-env_logger = "0.11.3"
-thiserror = "1.0"
+env_logger = "0.11.8"
+thiserror = "2.0.12"
 
 # 数据存储
-sled = "0.34"
+sled = "0.34.7"
+
+# Tor支持
+tokio-socks = "0.5.1"    # 轻量级SOCKS5代理支持
+socks = "0.3.4"          # SOCKS5代理支持
+async-trait = "0.1.77"   # 异步trait支持
 
 # 并发数据结构
-dashmap = "5.4.0"
+dashmap = "6.1.0"
+parking_lot = "0.12.4"
 
 # 时间处理
-chrono = { version = "0.4", features = ["serde"] }
+chrono = { version = "0.4.38", features = ["serde"], default-features = false }
+
+# 静态初始化
+lazy_static = "1.4.0"
+once_cell = "1.21.3"
+
+# 实用工具
+regex = "1.11.1"
+twox-hash = "2.1.1"
+governor = "0.6.3"
+nonzero_ext = "0.3.0"
+rayon = "1.10.0"
+uuid = { version = "1.8.0", features = ["v4"] }
+lru = "0.12.1"
+md5 = "0.7.0"
+axum = "0.7.5"
+
+# 地址编码
+data-encoding = "2.5.0"
+
+# 校验和计算
+crc = "3.0.1"
+serde_with = "3.14.0"

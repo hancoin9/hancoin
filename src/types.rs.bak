@@ -1,0 +1,796 @@
+use serde::{Serialize, Deserialize};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::collections::{VecDeque, HashMap};
+use log::{warn, info, debug, error};
+use std::time::{SystemTime, UNIX_EPOCH};
+use regex::Regex;
+use lazy_static::lazy_static;
+use sha2::{Digest, Sha256};
+use parking_lot::RwLock;
+use once_cell::sync::Lazy;
+use std::hash::Hasher;
+use twox_hash::XxHash64;
+use dashmap::DashMap;
+use lru::LruCache;
+use serde_bytes;
+
+// 使用once_cell替代lazy_static
+static ACCOUNT_ID_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"^[1-9A-HJ-NP-Za-km-z]{32,44}$").expect("Invalid account ID regex")
+});
+
+// 优化的哈希器实例
+static HASHER: Lazy<XxHash64> = Lazy::new(XxHash64::default);
+
+/// 验证账户ID格式
+pub fn is_valid_account_id(account_id: &str) -> bool {
+    ACCOUNT_ID_REGEX.is_match(account_id)
+}
+
+/// 最大交易历史记录数
+const MAX_TX_HISTORY: usize = 100;
+/// 最大动态消息长度
+const MAX_MOMENT_LENGTH: usize = 280;
+
+/// HAN 总发行量（100亿 * 100_000 = 1_000_000_000_000）
+pub const HAN_TOTAL_SUPPLY: u64 = 1_000_000_000_000;
+
+/// 按年度返回当年分配量
+pub fn yearly_distribution(year: u32) -> Option<u64> {
+    if year == 0 {
+        return Some(0);
+    }
+    
+    match year {
+        1 => HAN_TOTAL_SUPPLY.checked_mul(20)?.checked_div(100),
+        2 => HAN_TOTAL_SUPPLY.checked_mul(10)?.checked_div(100),
+        3 => HAN_TOTAL_SUPPLY.checked_mul(5)?.checked_div(100),
+        4 => HAN_TOTAL_SUPPLY.checked_mul(3)?.checked_div(100),
+        5 => HAN_TOTAL_SUPPLY.checked_mul(2)?.checked_div(100),
+        6..=105 => {
+            let remaining = HAN_TOTAL_SUPPLY.checked_mul(60)?.checked_div(100)?;
+            remaining.checked_div(100)
+        },
+        _ => Some(0),
+    }
+}
+
+/// 账户结构体，包含余额和状态信息
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Account {
+    /// 账户余额
+    pub balance: u64,
+    /// 上次领取水龙头时间
+    pub last_claim: u64,
+    /// 交易历史记录
+    #[serde(default)]
+    pub transactions: VecDeque<TxRef>,
+    /// 账户创建时间
+    #[serde(default)]
+    pub created_at: u64,
+    /// 最后活动时间
+    #[serde(default)]
+    pub last_active: u64,
+    /// 交易nonce，防止重放攻击
+    #[serde(default)]
+    pub nonce: u64,
+    /// 账户状态
+    #[serde(default)]
+    pub status: AccountStatus,
+}
+
+/// 账户状态
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+pub enum AccountStatus {
+    #[default]
+    Active,
+    Frozen,
+    Restricted,
+}
+
+impl Default for Account {
+    fn default() -> Self {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+            
+        Self {
+            balance: 0,
+            last_claim: 0,
+            transactions: VecDeque::with_capacity(100), // 保存最近100笔交易
+            created_at: now,
+            last_active: now,
+            nonce: 0,
+            status: AccountStatus::Active,
+        }
+    }
+}
+
+impl Account {
+    /// 更新账户的最后活动时间
+    pub fn update_activity(&mut self) {
+        self.last_active = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+    }
+    
+    /// 添加交易引用
+    pub fn add_transaction(&mut self, tx_ref: TxRef) {
+        // 保持交易历史在100条以内
+        if self.transactions.len() >= 100 {
+            self.transactions.pop_front();
+        }
+        self.transactions.push_back(tx_ref);
+        self.update_activity();
+    }
+    
+    /// 检查账户是否可以领取水龙头
+    pub fn can_claim_faucet(&self) -> Result<(), String> {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+            
+        if now - self.last_claim < FAUCET_COOLDOWN {
+            let wait_time = FAUCET_COOLDOWN - (now - self.last_claim);
+            return Err(format!(
+                "Too frequent requests. Please wait {} seconds before claiming again.",
+                wait_time
+            ));
+        }
+        
+        Ok(())
+    }
+}
+
+use dashmap::DashMap;
+
+/// 交易引用，用于在账户中存储交易历史
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TxRef {
+    pub tx_id: String,
+    pub timestamp: u64,
+    pub amount: u64,
+    pub is_incoming: bool,
+}
+
+/// 优化的账本结构体
+pub struct Ledger {
+    pub accounts: Arc<DashMap<String, Account>>,
+    pub issued: AtomicU64,
+    pub transactions: Arc<DashMap<String, Tx>>,
+    pub moments: Arc<DashMap<String, Moment>>,
+    // 添加缓存优化频繁访问的数据
+    #[serde(skip)]
+    pub cache: Arc<RwLock<LruCache<String, Account>>>,
+    // 缓存统计
+    #[serde(skip)]
+    pub cache_hits: AtomicU64,
+    #[serde(skip)]
+    pub cache_misses: AtomicU64,
+}
+
+impl Default for Ledger {
+    fn default() -> Self {
+        Self {
+            accounts: Arc::new(DashMap::new()),
+            issued: AtomicU64::new(0),
+            transactions: Arc::new(DashMap::new()),
+            moments: Arc::new(DashMap::new()),
+            cache: Arc::new(RwLock::new(LruCache::new(1000))), // 缓存1000个账户
+            cache_hits: AtomicU64::new(0),
+            cache_misses: AtomicU64::new(0),
+        }
+    }
+}
+
+impl Ledger {
+    /// 创建新的账本实例
+    pub fn new() -> Self {
+        Self {
+            accounts: Arc::new(DashMap::new()),
+            issued: AtomicU64::new(0),
+            transactions: Arc::new(DashMap::new()),
+            moments: Arc::new(DashMap::new()),
+            cache: Arc::new(RwLock::new(LruCache::new(1000))), // 缓存1000个账户
+            cache_hits: AtomicU64::new(0),
+            cache_misses: AtomicU64::new(0),
+        }
+    }
+    
+    /// 批量获取账户信息，优先使用缓存
+    pub fn get_accounts_batch(&self, account_ids: &[String]) -> HashMap<String, Account> {
+        let mut result = HashMap::with_capacity(account_ids.len());
+        
+        // 先从缓存中获取
+        let mut cache_miss = Vec::new();
+        {
+            if let Ok(cache) = self.cache.read() {
+                for id in account_ids {
+                    if let Some(account) = cache.peek(id) {
+                        result.insert(id.clone(), account.clone());
+                    } else {
+                        cache_miss.push(id.clone());
+                    }
+                }
+            } else {
+                // 如果无法获取缓存锁，所有ID都视为缓存未命中
+                cache_miss = account_ids.to_vec();
+            }
+        }
+        
+        // 对于缓存未命中的账户，从存储中获取
+        for id in cache_miss {
+            if let Some(account) = self.accounts.get(&id) {
+                let account_clone = account.clone();
+                result.insert(id.clone(), account_clone.clone());
+                
+                // 更新缓存
+                if let Ok(mut cache) = self.cache.write() {
+                    cache.put(id, account_clone);
+                }
+            }
+        }
+        
+        result
+    }
+    
+    /// 批量获取动态信息
+    pub fn get_moments_batch(&self, moment_ids: &[String]) -> HashMap<String, Moment> {
+        let mut result = HashMap::with_capacity(moment_ids.len());
+        
+        // 从存储中获取
+        for id in moment_ids {
+            if let Some(moment) = self.moments.get(id) {
+                result.insert(id.clone(), moment.clone());
+            }
+        }
+        
+        result
+    }
+    
+    /// 使用缓存获取账户信息，提高读取性能
+    pub fn get_account_with_cache(&self, account_id: &str) -> Option<Account> {
+        // 首先尝试从缓存中获取
+        if let Ok(mut cache) = self.cache.write() {
+            if let Some(account) = cache.get(account_id) {
+                // 更新缓存命中统计
+                self.cache_hits.fetch_add(1, Ordering::SeqCst);
+                return Some(account.clone());
+            }
+        }
+        
+        // 更新缓存未命中统计
+        self.cache_misses.fetch_add(1, Ordering::SeqCst);
+        
+        // 如果缓存中没有，从账户存储中获取
+        if let Some(account) = self.accounts.get(account_id) {
+            let account_clone = account.clone();
+            
+            // 更新缓存
+            if let Ok(mut cache) = self.cache.write() {
+                cache.put(account_id.to_string(), account_clone.clone());
+            }
+            
+            return Some(account_clone);
+        }
+        
+        None
+    }
+    
+    /// 获取缓存统计信息
+    pub fn get_cache_stats(&self) -> (u64, u64, f64) {
+        let hits = self.cache_hits.load(Ordering::SeqCst);
+        let misses = self.cache_misses.load(Ordering::SeqCst);
+        let total = hits + misses;
+        
+        let hit_rate = if total > 0 {
+            hits as f64 / total as f64
+        } else {
+            0.0
+        };
+        
+        (hits, misses, hit_rate)
+    }
+    
+    /// 重置缓存统计信息
+    pub fn reset_cache_stats(&self) {
+        self.cache_hits.store(0, Ordering::SeqCst);
+        self.cache_misses.store(0, Ordering::SeqCst);
+    }
+    
+    /// 获取账户余额，使用缓存提高性能
+    pub fn get_balance(&self, account_id: &str) -> u64 {
+        self.get_account_with_cache(account_id)
+            .map(|account| account.balance)
+            .unwrap_or(0)
+    }
+    
+    /// 获取当前已发行的代币数量
+    pub fn get_issued(&self) -> u64 {
+        self.issued.load(Ordering::SeqCst)
+    }
+    
+    /// 获取账户信息，如果不存在则创建
+    pub fn get_or_create_account(&self, account_id: &str) -> dashmap::mapref::one::RefMut<String, Account> {
+        // 先检查缓存
+        let account_exists = {
+            if let Ok(cache) = self.cache.read() {
+                cache.contains(&account_id.to_string())
+            } else {
+                false
+            }
+        };
+        
+        // 如果缓存中存在，直接从存储获取
+        if account_exists {
+            return self.accounts.entry(account_id.to_string()).or_insert(Account::default());
+        }
+        
+        // 如果不存在，创建新账户并更新缓存
+        let result = self.accounts.entry(account_id.to_string()).or_insert_with(|| {
+            let new_account = Account::default();
+            
+            // 更新缓存
+            if let Ok(mut cache) = self.cache.write() {
+                cache.put(account_id.to_string(), new_account.clone());
+            }
+            
+            new_account
+        });
+        
+        result
+    }
+    
+    /// 检查是否达到总供应量上限
+    pub fn check_supply_limit(&self, amount: u64) -> Result<(), String> {
+        let current_issued = self.get_issued();
+        if current_issued + amount > HAN_TOTAL_SUPPLY {
+            return Err("Total supply limit reached".to_string());
+        }
+        Ok(())
+    }
+
+    /// 发布动态消息
+    pub fn post_moment(&self, from: &str, text: &str, signature: &str) -> Result<String, String> {
+        // 验证账户
+        if !is_valid_account_id(from) {
+            return Err("Invalid account ID".to_string());
+        }
+
+        // 创建消息
+        let moment = Moment::new(from.to_string(), text.to_string(), signature.to_string())?;
+
+        // 验证签名
+        if !moment.verify_signature() {
+            return Err("Invalid message signature".to_string());
+        }
+
+        // 存储消息
+        self.moments.insert(moment.id.clone(), moment.clone());
+
+        // 更新账户最后活动时间
+        // 先尝试从缓存获取账户
+        let mut account_updated = false;
+        if let Some(mut account) = self.accounts.get_mut(from) {
+            account.last_active = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            
+            // 更新缓存
+            if let Ok(mut cache) = self.cache.write() {
+                cache.put(from.to_string(), account.clone());
+            }
+            account_updated = true;
+        }
+        
+        // 如果账户不存在，创建一个新账户
+        if !account_updated {
+            let mut new_account = Account::default();
+            new_account.update_activity();
+            self.accounts.insert(from.to_string(), new_account.clone());
+            
+            // 更新缓存
+            if let Ok(mut cache) = self.cache.write() {
+                cache.put(from.to_string(), new_account);
+            }
+        }
+
+        info!("New moment posted by {} (ID: {})", from, moment.id);
+        Ok(moment.id)
+    }
+
+    /// 点赞动态消息
+    pub fn like_moment(&self, moment_id: &str, liker: &str) -> Result<u64, String> {
+        // 验证账户
+        if !is_valid_account_id(liker) {
+            return Err("Invalid liker account ID".to_string());
+        }
+
+        // 获取消息
+        let mut moment = match self.moments.get_mut(moment_id) {
+            Some(moment) => moment,
+            None => return Err("Moment not found".to_string()),
+        };
+
+        // 增加点赞数
+        moment.add_like();
+
+        // 更新账户最后活动时间
+        // 先尝试从缓存获取账户
+        let mut account_updated = false;
+        if let Some(mut account) = self.accounts.get_mut(liker) {
+            account.last_active = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            
+            // 更新缓存
+            if let Ok(mut cache) = self.cache.write() {
+                cache.put(liker.to_string(), account.clone());
+            }
+            account_updated = true;
+        }
+        
+        // 如果账户不存在，创建一个新账户
+        if !account_updated {
+            let mut new_account = Account::default();
+            new_account.update_activity();
+            self.accounts.insert(liker.to_string(), new_account.clone());
+            
+            // 更新缓存
+            if let Ok(mut cache) = self.cache.write() {
+                cache.put(liker.to_string(), new_account);
+            }
+        }
+
+        info!("Moment {} liked by {}", moment_id, liker);
+        Ok(moment.likes)
+    }
+
+    /// 回复动态消息
+    pub fn reply_to_moment(&self, moment_id: &str, reply_text: &str, from: &str, signature: &str) -> Result<String, String> {
+        // 验证账户
+        if !is_valid_account_id(from) {
+            return Err("Invalid account ID".to_string());
+        }
+
+        // 创建回复消息
+        let reply_moment = Moment::new(from.to_string(), reply_text.to_string(), signature.to_string())?;
+
+        // 验证签名
+        if !reply_moment.verify_signature() {
+            return Err("Invalid message signature".to_string());
+        }
+
+        // 存储回复消息
+        self.moments.insert(reply_moment.id.clone(), reply_moment.clone());
+
+        // 添加到原消息的回复列表
+        if let Some(mut original_moment) = self.moments.get_mut(moment_id) {
+            original_moment.add_reply(reply_moment.id.clone());
+        } else {
+            return Err("Original moment not found".to_string());
+        }
+
+        // 更新账户最后活动时间
+        // 先尝试从缓存获取账户
+        let mut account_updated = false;
+        if let Some(mut account) = self.accounts.get_mut(from) {
+            account.last_active = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            
+            // 更新缓存
+            if let Ok(mut cache) = self.cache.write() {
+                cache.put(from.to_string(), account.clone());
+            }
+            account_updated = true;
+        }
+        
+        // 如果账户不存在，创建一个新账户
+        if !account_updated {
+            let mut new_account = Account::default();
+            new_account.update_activity();
+            self.accounts.insert(from.to_string(), new_account.clone());
+            
+            // 更新缓存
+            if let Ok(mut cache) = self.cache.write() {
+                cache.put(from.to_string(), new_account);
+            }
+        }
+
+        info!("Reply to moment {} by {} (ID: {})", moment_id, from, reply_moment.id);
+        Ok(reply_moment.id)
+    }
+    
+    /// 优化的转账操作
+    pub fn transfer(&self, tx: &Tx) -> Result<String, String> {
+        // 更严格的输入验证
+        if tx.from.is_empty() || tx.to.is_empty() {
+            return Err("Empty account ID".to_string());
+        }
+        
+        if !is_valid_account_id(&tx.from) {
+            return Err(format!("Invalid sender account ID: {}", tx.from));
+        }
+        
+        if !is_valid_account_id(&tx.to) {
+            return Err(format!("Invalid recipient account ID: {}", tx.to));
+        }
+        
+        if tx.amount == 0 {
+            return Err("Zero amount transfer".to_string());
+        }
+        
+        // 检查发送方账户，优先使用缓存
+        let sender_account = self.get_account_with_cache(&tx.from)
+            .ok_or_else(|| "Sender account not found".to_string())?;
+        
+        // 检查账户状态
+        if matches!(sender_account.status, AccountStatus::Frozen) {
+            return Err("Sender account is frozen".to_string());
+        }
+        
+        // 检查nonce是否有效
+        if tx.nonce <= sender_account.nonce {
+            return Err("Invalid nonce (possible replay attack)".to_string());
+        }
+        
+        // 检查余额
+        if sender_account.balance < tx.amount {
+            return Err("Insufficient balance".to_string());
+        }
+        
+        // 优化的哈希计算
+        let tx_hash = {
+            let mut hasher = HASHER.clone();
+            hasher.write(tx.from.as_bytes());
+            hasher.write(tx.to.as_bytes());
+            hasher.write(&tx.amount.to_be_bytes());
+            hasher.write(&tx.nonce.to_be_bytes());
+            hasher.write(&tx.timestamp.to_be_bytes());
+            format!("{:x}", hasher.finish())
+        };
+        
+        // 更新发送方账户
+        if let Some(mut sender) = self.accounts.get_mut(&tx.from) {
+            sender.balance -= tx.amount;
+            sender.nonce = tx.nonce;
+            sender.add_transaction(TxRef {
+                tx_id: tx_hash.clone(),
+                timestamp: tx.timestamp,
+                amount: tx.amount,
+                is_incoming: false,
+            });
+            
+            // 更新缓存
+            if let Ok(mut cache) = self.cache.write() {
+                cache.put(tx.from.clone(), sender.clone());
+            }
+        } else {
+            return Err("Sender account not found during update".to_string());
+        }
+        
+        // 更新接收方账户
+        let receiver_exists = self.accounts.contains_key(&tx.to);
+        if receiver_exists {
+            if let Some(mut receiver) = self.accounts.get_mut(&tx.to) {
+                receiver.balance += tx.amount;
+                receiver.add_transaction(TxRef {
+                    tx_id: tx_hash.clone(),
+                    timestamp: tx.timestamp,
+                    amount: tx.amount,
+                    is_incoming: true,
+                });
+                
+                // 更新缓存
+                if let Ok(mut cache) = self.cache.write() {
+                    cache.put(tx.to.clone(), receiver.clone());
+                }
+            }
+        } else {
+            // 创建新账户
+            let mut new_receiver = Account::default();
+            new_receiver.balance = tx.amount;
+            new_receiver.add_transaction(TxRef {
+                tx_id: tx_hash.clone(),
+                timestamp: tx.timestamp,
+                amount: tx.amount,
+                is_incoming: true,
+            });
+            
+            self.accounts.insert(tx.to.clone(), new_receiver.clone());
+            
+            // 更新缓存
+            if let Ok(mut cache) = self.cache.write() {
+                cache.put(tx.to.clone(), new_receiver);
+            }
+        }
+        
+        // 存储交易
+        self.transactions.insert(tx_hash.clone(), tx.clone());
+        
+        info!("Transfer completed: {} HAN from {} to {}", tx.amount, tx.from, tx.to);
+        Ok(tx_hash)
+    }
+}
+
+/// 优化的交易结构体
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Tx {
+    #[serde(with = "serde_bytes")]
+    pub from: String,
+    #[serde(with = "serde_bytes")]
+    pub to: String,
+    pub amount: u64,
+    #[serde(with = "serde_bytes")]
+    pub signature: Vec<u8>, // 使用Vec<u8>更高效
+    #[serde(default)]
+    pub timestamp: u64,
+    #[serde(default, with = "serde_bytes")]
+    pub memo: Vec<u8>, // 使用Vec<u8>减少内存占用
+    pub nonce: u64,
+    #[serde(skip)]
+    pub hash: Option<String>, // 缓存哈希值
+}
+
+impl Tx {
+    /// 创建新的交易
+    pub fn new(from: String, to: String, amount: u64, signature: String, nonce: u64) -> Self {
+        Self {
+            from,
+            to,
+            amount,
+            signature,
+            timestamp: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            memo: String::new(),
+            nonce,
+        }
+    }
+    
+    /// 设置交易备注
+    pub fn with_memo(mut self, memo: String) -> Self {
+        self.memo = memo;
+        self
+    }
+    
+    /// 验证交易是否有效
+    pub fn is_valid(&self) -> bool {
+        // 基本验证
+        if !is_valid_account_id(&self.from) 
+            || !is_valid_account_id(&self.to) 
+            || self.amount == 0 
+            || self.signature.is_empty()
+            || self.nonce == 0 {
+            return false;
+        }
+        
+        // 金额不能超过上限
+        if self.amount > HAN_TOTAL_SUPPLY {
+            return false;
+        }
+        
+        true
+    }
+    
+    /// 获取签名消息
+    pub fn get_sign_message(&self) -> Vec<u8> {
+        let mut msg = Vec::new();
+        msg.extend(self.from.as_bytes());
+        msg.extend(self.to.as_bytes());
+        msg.extend(self.amount.to_be_bytes());
+        msg.extend(self.nonce.to_be_bytes());
+        msg.extend(self.timestamp.to_be_bytes());
+        msg
+    }
+}
+
+/// 优化的动态消息结构体
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Moment {
+    #[serde(with = "serde_bytes")]
+    pub from: String,
+    #[serde(with = "serde_bytes")]
+    pub text: String,
+    pub timestamp: u64,
+    #[serde(with = "serde_bytes")]
+    pub signature: Vec<u8>,
+    #[serde(default)]
+    pub likes: u64,
+    #[serde(default)]
+    pub replies: Vec<String>,
+    #[serde(skip)]
+    pub cached_size: usize, // 缓存大小用于内存管理
+    #[serde(default)]
+    pub id: String, // 消息唯一标识符
+}
+
+impl Moment {
+    /// 创建新的动态消息
+    pub fn new(from: String, text: String, signature: String) -> Result<Self, String> {
+        // 验证消息长度
+        if text.len() > MAX_MOMENT_LENGTH {
+            return Err(format!("Message too long. Maximum length is {} characters.", MAX_MOMENT_LENGTH));
+        }
+        
+        // 验证账户ID格式
+        if !is_valid_account_id(&from) {
+            return Err("Invalid account ID format".to_string());
+        }
+        
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        
+        // 生成消息ID (使用from + text + timestamp的哈希)
+        let id_content = format!("{}:{}:{}", from, text, timestamp);
+        let id = format!("{:x}", md5::compute(id_content));
+        
+        let moment = Self {
+            from,
+            text,
+            timestamp,
+            signature: signature.into_bytes(),
+            likes: 0,
+            replies: Vec::new(),
+            cached_size: 0, // 初始化为0，后续可以计算
+            id,
+        };
+        
+        // 计算缓存大小
+        let size = bincode::serialize(&moment).map(|v| v.len()).unwrap_or(0);
+        
+        Ok(Self {
+            cached_size: size,
+            ..moment
+        })
+    }
+    
+    /// 验证消息签名
+    pub fn verify_signature(&self) -> bool {
+        use crate::crypto;
+        use ed25519_dalek::{Signature, VerifyingKey};
+        
+        // 尝试解析公钥和签名
+        let public_key = match VerifyingKey::from_bytes(&hex::decode(&self.from).unwrap_or_default()) {
+            Ok(pk) => pk,
+            Err(_) => return false,
+        };
+        
+        let signature = match Signature::from_bytes(&self.signature) {
+            Ok(sig) => sig,
+            Err(_) => return false,
+        };
+        
+        // 构建要验证的消息
+        let message = format!("{}:{}", self.text, self.timestamp).into_bytes();
+        
+        // 使用crypto模块验证签名
+        crypto::verify_signature(&public_key, &message, &signature)
+    }
+    
+    /// 添加回复
+    pub fn add_reply(&mut self, reply_id: String) {
+        self.replies.push(reply_id);
+    }
+    
+    /// 增加点赞数
+    pub fn add_like(&mut self) {
+        self.likes += 1;
+    }
+}
+
+/// 水龙头每日领取限额
+pub const FAUCET_DAILY_LIMIT: u64 = 100;
+/// 水龙头领取冷却时间（秒）
+pub const FAUCET_COOLDOWN: u64 = 86400; // 24小时
