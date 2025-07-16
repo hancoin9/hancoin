@@ -8,7 +8,7 @@ mod coinjoin;
 use crate::types::*;
 use crate::p2p::{start_p2p, P2PConfig};
 use crate::ws::chat_routes;
-use crate::crypto::{verify_signature, PublicKey, Signature};
+use crate::crypto::{init_crypto, generate_keypair, sign_message};
 use crate::tor::TorConfig;
 use crate::coinjoin::{CoinJoinManager, CoinJoinSession, CoinJoinRequest, CoinJoinStatus};
 
@@ -24,6 +24,7 @@ use hex::decode;
 use tokio::sync::RwLock;
 use std::time::Duration;
 use uuid::Uuid;
+use ed25519_dalek::{Verifier, Signature, VerifyingKey};
 
 // API版本常量
 const API_VERSION: &str = "v1";
@@ -33,6 +34,9 @@ async fn main() {
     // 初始化日志系统
     env_logger::init();
     info!("Starting HANCOIN node v0.3.0...");
+
+    // 初始化加密子系统
+    init_crypto();
 
     // 创建账本实例
     let ledger = Arc::new(Ledger::new());
@@ -176,52 +180,66 @@ async fn handle_faucet(
     // 提取并验证account_id
     let account_id = req.get("account_id")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| warp::reject::custom(Error("Missing account_id".to_string())))?;
+        .ok_or_else(|| warp::reject::custom(HancoinError::MissingAccountId))?;
 
     // 提取并验证signature
     let signature = req.get("signature")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| warp::reject::custom(Error("Missing signature".to_string())))?;
+        .ok_or_else(|| warp::reject::custom(HancoinError::MissingSignature))?;
+
+    // 验证账户ID格式
+    if !is_valid_account_id(account_id) {
+        return Err(warp::reject::custom(HancoinError::InvalidAccountIdFormat));
+    }
 
     // 验证公钥格式
     let public_key_bytes = decode(account_id)
-        .map_err(|_| warp::reject::custom(Error("Invalid account_id format".to_string())))?;
-    let public_key = PublicKey::from_bytes(&public_key_bytes)
-        .map_err(|_| warp::reject::custom(Error("Invalid public key".to_string())))?;
+        .map_err(|_| warp::reject::custom(HancoinError::InvalidAccountIdFormat))?;
+    let public_key = VerifyingKey::from_bytes(&public_key_bytes.try_into().unwrap())
+        .map_err(|_| warp::reject::custom(HancoinError::InvalidPublicKey))?;
 
     // 验证签名
     let message = b"claim_faucet";
     let signature_bytes = decode(signature)
-        .map_err(|_| warp::reject::custom(Error("Invalid signature format".to_string())))?;
-    let signature = Signature::from_bytes(&signature_bytes)
-        .map_err(|_| warp::reject::custom(Error("Invalid signature data".to_string())))?;
-    if !verify_signature(&public_key, message, &signature) {
-        return Err(warp::reject::custom(Error("Invalid signature".to_string())));
+        .map_err(|_| warp::reject::custom(HancoinError::InvalidSignatureFormat))?;
+    let signature = Signature::from_bytes(&signature_bytes.try_into().unwrap())
+        .map_err(|_| warp::reject::custom(HancoinError::InvalidSignatureData))?;
+    
+    if public_key.verify(message, &signature).is_err() {
+        return Err(warp::reject::custom(HancoinError::InvalidSignature));
     }
 
     // 获取当前时间
     let now = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
-        .map_err(|_| warp::reject::custom(Error("System time error".to_string())))?
+        .map_err(|_| warp::reject::custom(HancoinError::SystemTimeError))?
         .as_secs();
 
-    // 使用DashMap原子操作检查领取频率
-    let mut account = ledger.get_or_create_account(account_id);
+    // 获取或创建账户
+    let mut account = match ledger.accounts.get(account_id) {
+        Some(account) => account.clone(),
+        None => {
+            let new_account = Account::default();
+            ledger.accounts.insert(account_id.to_string(), new_account.clone());
+            new_account
+        }
+    };
     
     // 严格检查领取频率(24小时冷却)
-    if now - account.last_claim < 86400 {
-        return Err(warp::reject::custom(Error("Faucet cooldown period not over".to_string())));
+    if now - account.last_claim < FAUCET_COOLDOWN {
+        return Err(warp::reject::custom(HancoinError::FaucetCooldownNotOver));
     }
 
     // 检查总发行量(防止溢出)
     let new_issued = ledger.issued.load(Ordering::SeqCst) + FAUCET_DAILY_LIMIT;
     if new_issued > HAN_TOTAL_SUPPLY {
-        return Err(warp::reject::custom(Error("Total supply limit reached".to_string())));
+        return Err(warp::reject::custom(HancoinError::TotalSupplyLimitReached));
     }
 
     // 原子更新账户和总发行量
     account.balance = account.balance.saturating_add(FAUCET_DAILY_LIMIT);
     account.last_claim = now;
+    ledger.accounts.insert(account_id.to_string(), account.clone());
     ledger.issued.store(new_issued, Ordering::SeqCst);
     
     // 记录审计日志
@@ -244,7 +262,7 @@ async fn handle_balance(
     ledger: Arc<Ledger>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let account = ledger.accounts.get(&account_id)
-        .ok_or_else(|| warp::reject::custom(Error("Account not found".to_string())))?;
+        .ok_or_else(|| warp::reject::custom(HancoinError::AccountNotFound))?;
 
     Ok(warp::reply::json(&serde_json::json!({
         "status": "ok",
@@ -255,355 +273,40 @@ async fn handle_balance(
 
 /// 处理转账请求
 async fn handle_transfer(
-    tx: Tx,
+    tx_req: serde_json::Value,
     ledger: Arc<Ledger>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    // 验证交易
-    if !tx.is_valid() {
-        return Err(warp::reject::custom(Error("Invalid transaction".to_string())));
+    // 提取交易信息
+    let from = tx_req.get("from")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| warp::reject::custom(HancoinError::InvalidTransaction))?;
+    
+    let to = tx_req.get("to")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| warp::reject::custom(HancoinError::InvalidTransaction))?;
+    
+    let amount = tx_req.get("amount")
+        .and_then(|v| v.as_u64())
+        .ok_or_else(|| warp::reject::custom(HancoinError::InvalidTransaction))?;
+    
+    let signature = tx_req.get("signature")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| warp::reject::custom(HancoinError::InvalidTransaction))?;
+    
+    // 验证发送方账户存在
+    let mut from_account = ledger.accounts.get(from)
+        .ok_or_else(|| warp::reject::custom(HancoinError::AccountNotFound))?
+        .clone();
+    
+    // 验证余额充足
+    if from_account.balance < amount {
+        return Err(warp::reject::custom(HancoinError::InvalidTransaction));
     }
-
-    // 执行转账
-    ledger.transfer(&tx)
-        .map_err(|e| warp::reject::custom(Error(e)))?;
-
-    Ok(warp::reply::json(&serde_json::json!({
-        "status": "ok",
-        "tx_id": format!("tx_{}", Uuid::new_v4())
-    })))
-}
-
-/// 处理交易历史查询请求
-async fn handle_transactions(
-    account_id: String,
-    ledger: Arc<Ledger>,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let account = ledger.accounts.get(&account_id)
-        .ok_or_else(|| warp::reject::custom(Error("Account not found".to_string())))?;
-
-    Ok(warp::reply::json(&serde_json::json!({
-        "status": "ok",
-        "transactions": account.transactions
-    })))
-}
-
-/// 处理发布动态消息请求
-async fn handle_post_moment(
-    req: serde_json::Value,
-    ledger: Arc<Ledger>,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let from = req.get("from")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| warp::reject::custom(Error("Missing from".to_string())))?;
-
-    let text = req.get("text")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| warp::reject::custom(Error("Missing text".to_string())))?;
-
-    let signature = req.get("signature")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| warp::reject::custom(Error("Missing signature".to_string())))?;
-
+    
     // 验证签名
     let public_key_bytes = decode(from)
-        .map_err(|_| warp::reject::custom(Error("Invalid from format".to_string())))?;
-    let public_key = PublicKey::from_bytes(&public_key_bytes)
-        .map_err(|_| warp::reject::custom(Error("Invalid public key".to_string())))?;
-
-    let signature_bytes = decode(signature)
-        .map_err(|_| warp::reject::custom(Error("Invalid signature format".to_string())))?;
-    let signature = Signature::from_bytes(&signature_bytes)
-        .map_err(|_| warp::reject::custom(Error("Invalid signature data".to_string())))?;
+        .map_err(|_| warp::reject::custom(HancoinError::InvalidAccountIdFormat))?;
+    let public_key = VerifyingKey::from_bytes(&public_key_bytes.try_into().unwrap())
+        .map_err(|_| warp::reject::custom(HancoinError::InvalidPublicKey))?;
     
-    if !verify_signature(&public_key, text.as_bytes(), &signature) {
-        return Err(warp::reject::custom(Error("Invalid signature".to_string())));
-    }
-
-    let moment = Moment::new(from.to_string(), text.to_string(), signature.to_string());
-    let moment_id = format!("moment_{}", Uuid::new_v4());
-    ledger.moments.insert(moment_id.clone(), moment);
-
-    Ok(warp::reply::json(&serde_json::json!({
-        "status": "ok",
-        "moment_id": moment_id
-    })))
-}
-
-/// 处理查询动态消息请求
-async fn handle_get_moments(
-    query: HashMap<String, String>,
-    ledger: Arc<Ledger>,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let limit = query.get("limit")
-        .and_then(|v| v.parse::<usize>().ok())
-        .map(|n| std::cmp::min(n, 100)) // 限制最大100条
-        .unwrap_or(20);
-    let offset = query.get("offset")
-        .and_then(|v| v.parse::<usize>().ok())
-        .unwrap_or(0);
-        
-    // 防止offset过大导致性能问题
-    let offset = std::cmp::min(offset, ledger.moments.len().saturating_sub(1));
-
-    let moments: Vec<_> = ledger.moments.iter()
-        .skip(offset)
-        .take(limit)
-        .map(|entry| {
-            let (id, moment) = entry.pair();
-            serde_json::json!({
-                "id": id,
-                "from": moment.from,
-                "text": moment.text,
-                "timestamp": moment.timestamp,
-                "likes": moment.likes
-            })
-        })
-        .collect();
-
-    Ok(warp::reply::json(&serde_json::json!({
-        "status": "ok",
-        "moments": moments,
-        "count": moments.len()
-    })))
-}
-
-/// 处理系统状态查询请求
-async fn handle_status(
-    ledger: Arc<Ledger>,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    Ok(warp::reply::json(&serde_json::json!({
-        "status": "ok",
-        "total_accounts": ledger.accounts.len(),
-        "total_moments": ledger.moments.len(),
-        "total_issued": ledger.get_issued(),
-        "total_supply": HAN_TOTAL_SUPPLY
-    })))
-}
-
-// 自定义错误类型
-#[derive(Debug)]
-struct Error(String);
-
-impl warp::reject::Reject for Error {}
-
-#[derive(Debug)]
-struct RateLimitError;
-
-impl warp::reject::Reject for RateLimitError {}
-
-/// 处理拒绝请求
-async fn handle_rejection(err: warp::Rejection) -> Result<impl warp::Reply, std::convert::Infallible> {
-    let code;
-    let message;
-
-    if err.is_not_found() {
-        code = warp::http::StatusCode::NOT_FOUND;
-        message = "Not Found";
-    } else if let Some(e) = err.find::<Error>() {
-        code = warp::http::StatusCode::BAD_REQUEST;
-        message = &e.0;
-    } else if let Some(_) = err.find::<RateLimitError>() {
-        code = warp::http::StatusCode::TOO_MANY_REQUESTS;
-        message = "Rate limit exceeded. Please try again later.";
-    } else if let Some(_) = err.find::<warp::filters::body::BodyDeserializeError>() {
-        code = warp::http::StatusCode::BAD_REQUEST;
-        message = "Invalid JSON data";
-    } else if let Some(_) = err.find::<warp::reject::MethodNotAllowed>() {
-        code = warp::http::StatusCode::METHOD_NOT_ALLOWED;
-        message = "Method not allowed";
-    } else {
-        // 未处理的错误
-        code = warp::http::StatusCode::INTERNAL_SERVER_ERROR;
-        message = "Internal Server Error";
-        error!("Unhandled rejection: {:?}", err);
-    }
-
-    let json = warp::reply::json(&serde_json::json!({
-        "status": "error",
-        "message": message
-    }));
-
-    Ok(warp::reply::with_status(json, code))
-}
-
-/// 创建CoinJoin API路由
-fn create_coinjoin_routes(
-    manager: Arc<tokio::sync::Mutex<CoinJoinManager>>,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    // 创建CoinJoin会话路由
-    let create_session_route = warp::path(API_VERSION)
-        .and(warp::path("coinjoin"))
-        .and(warp::path("sessions"))
-        .and(warp::post())
-        .and(warp::body::json())
-        .and(with_coinjoin_manager(manager.clone()))
-        .and_then(handle_create_coinjoin_session);
-
-    // 获取CoinJoin会话路由
-    let get_session_route = warp::path(API_VERSION)
-        .and(warp::path("coinjoin"))
-        .and(warp::path("sessions"))
-        .and(warp::path::param::<String>())
-        .and(warp::get())
-        .and(with_coinjoin_manager(manager.clone()))
-        .and_then(handle_get_coinjoin_session);
-
-    // 添加输入路由
-    let add_input_route = warp::path(API_VERSION)
-        .and(warp::path("coinjoin"))
-        .and(warp::path("sessions"))
-        .and(warp::path::param::<String>())
-        .and(warp::path("inputs"))
-        .and(warp::post())
-        .and(warp::body::json())
-        .and(with_coinjoin_manager(manager.clone()))
-        .and_then(handle_add_coinjoin_input);
-
-    // 添加输出路由
-    let add_output_route = warp::path(API_VERSION)
-        .and(warp::path("coinjoin"))
-        .and(warp::path("sessions"))
-        .and(warp::path::param::<String>())
-        .and(warp::path("outputs"))
-        .and(warp::post())
-        .and(warp::body::json())
-        .and(with_coinjoin_manager(manager.clone()))
-        .and_then(handle_add_coinjoin_output);
-
-    // 添加签名路由
-    let add_signature_route = warp::path(API_VERSION)
-        .and(warp::path("coinjoin"))
-        .and(warp::path("sessions"))
-        .and(warp::path::param::<String>())
-        .and(warp::path("signatures"))
-        .and(warp::post())
-        .and(warp::body::json())
-        .and(with_coinjoin_manager(manager.clone()))
-        .and_then(handle_add_coinjoin_signature);
-
-    // 完成会话路由
-    let finalize_session_route = warp::path(API_VERSION)
-        .and(warp::path("coinjoin"))
-        .and(warp::path("sessions"))
-        .and(warp::path::param::<String>())
-        .and(warp::path("finalize"))
-        .and(warp::post())
-        .and(warp::body::json())
-        .and(with_coinjoin_manager(manager.clone()))
-        .and_then(handle_finalize_coinjoin_session);
-
-    // 组合所有CoinJoin路由
-    create_session_route
-        .or(get_session_route)
-        .or(add_input_route)
-        .or(add_output_route)
-        .or(add_signature_route)
-        .or(finalize_session_route)
-}
-
-/// 将CoinJoin管理器注入到处理程序中
-fn with_coinjoin_manager(
-    manager: Arc<tokio::sync::Mutex<CoinJoinManager>>,
-) -> impl Filter<Extract = (Arc<tokio::sync::Mutex<CoinJoinManager>>,), Error = std::convert::Infallible> + Clone {
-    warp::any().map(move || manager.clone())
-}
-
-/// 处理创建CoinJoin会话请求
-async fn handle_create_coinjoin_session(
-    req: CoinJoinRequest,
-    manager: Arc<tokio::sync::Mutex<CoinJoinManager>>,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let session_info = {
-        let mut manager = manager.lock().await;
-        manager.create_session(&req)
-    };
-
-    Ok(warp::reply::with_status(
-        warp::reply::json(&session_info),
-        warp::http::StatusCode::CREATED,
-    ))
-}
-
-/// 处理获取CoinJoin会话请求
-async fn handle_get_coinjoin_session(
-    id: String,
-    manager: Arc<tokio::sync::Mutex<CoinJoinManager>>,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let session = {
-        let manager = manager.lock().await;
-        manager.get_session(&id)
-    };
-
-    match session {
-        Some(session) => Ok(warp::reply::json(&session.get_info())),
-        None => Err(warp::reject::custom(Error(format!("会话不存在: {}", id)))),
-    }
-}
-
-/// 处理添加CoinJoin输入请求
-async fn handle_add_coinjoin_input(
-    id: String,
-    req: coinjoin::InputRequest,
-    manager: Arc<tokio::sync::Mutex<CoinJoinManager>>,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let result = {
-        let mut manager = manager.lock().await;
-        manager.add_input(&id, &req)
-    };
-
-    match result {
-        Ok(info) => Ok(warp::reply::json(&info)),
-        Err(err) => Err(warp::reject::custom(Error(err))),
-    }
-}
-
-/// 处理添加CoinJoin输出请求
-async fn handle_add_coinjoin_output(
-    id: String,
-    req: coinjoin::OutputRequest,
-    manager: Arc<tokio::sync::Mutex<CoinJoinManager>>,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let result = {
-        let mut manager = manager.lock().await;
-        manager.add_output(&id, &req)
-    };
-
-    match result {
-        Ok(info) => Ok(warp::reply::json(&info)),
-        Err(err) => Err(warp::reject::custom(Error(err))),
-    }
-}
-
-/// 处理添加CoinJoin签名请求
-async fn handle_add_coinjoin_signature(
-    id: String,
-    req: coinjoin::SignatureRequest,
-    manager: Arc<tokio::sync::Mutex<CoinJoinManager>>,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let result = {
-        let mut manager = manager.lock().await;
-        manager.add_signature(&id, &req)
-    };
-
-    match result {
-        Ok(info) => Ok(warp::reply::json(&info)),
-        Err(err) => Err(warp::reject::custom(Error(err))),
-    }
-}
-
-/// 处理完成CoinJoin会话请求
-async fn handle_finalize_coinjoin_session(
-    id: String,
-    req: coinjoin::FinalizeRequest,
-    manager: Arc<tokio::sync::Mutex<CoinJoinManager>>,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let result = {
-        let mut manager = manager.lock().await;
-        manager.finalize_session(&id, &req)
-    };
-
-    match result {
-        Ok(info) => Ok(warp::reply::json(&info)),
-        Err(err) => Err(warp::reject::custom(Error(err))),
-    }
-}
+    let message =

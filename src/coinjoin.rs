@@ -15,6 +15,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use dashmap::DashMap;
 
 /// CoinJoin会话状态
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -360,7 +361,7 @@ pub struct FinalizeRequest {
 /// CoinJoin会话管理器
 pub struct CoinJoinManager {
     /// 会话映射表
-    sessions: HashMap<String, CoinJoinSession>,
+    sessions: DashMap<String, CoinJoinSession>,
     /// 会话超时时间（秒）
     session_timeout: u64,
     /// 清理任务通道
@@ -391,14 +392,14 @@ impl CoinJoinManager {
         });
         
         Self {
-            sessions: HashMap::new(),
+            sessions: DashMap::new(),
             session_timeout,
             _cleanup_tx: Some(tx),
         }
     }
     
     /// 创建新的CoinJoin会话
-    pub fn create_session(&mut self, req: &CoinJoinRequest) -> CoinJoinSessionInfo {
+    pub fn create_session(&self, req: &CoinJoinRequest) -> CoinJoinSessionInfo {
         let min_participants = req.min_participants.unwrap_or(3);
         let max_participants = req.max_participants.unwrap_or(10);
         let fee_rate = req.fee_rate.unwrap_or(1);
@@ -423,18 +424,13 @@ impl CoinJoinManager {
     }
     
     /// 获取会话
-    pub fn get_session(&self, id: &str) -> Option<&CoinJoinSession> {
-        self.sessions.get(id)
-    }
-    
-    /// 获取可变会话
-    pub fn get_session_mut(&mut self, id: &str) -> Option<&mut CoinJoinSession> {
-        self.sessions.get_mut(id)
+    pub fn get_session(&self, id: &str) -> Option<CoinJoinSession> {
+        self.sessions.get(id).map(|s| s.clone())
     }
     
     /// 添加交易输入
-    pub fn add_input(&mut self, session_id: &str, req: &InputRequest) -> Result<CoinJoinSessionInfo, String> {
-        let session = self.get_session_mut(session_id)
+    pub fn add_input(&self, session_id: &str, req: &InputRequest) -> Result<CoinJoinSessionInfo, String> {
+        let mut session = self.sessions.get_mut(session_id)
             .ok_or_else(|| format!("会话不存在: {}", session_id))?;
             
         if !session.participants.contains(&req.participant_id) {
@@ -442,204 +438,4 @@ impl CoinJoinManager {
         }
         
         if !session.add_input(req.input.clone()) {
-            return Err(format!("无法添加输入，会话状态: {:?}", session.status));
-        }
-        
-        Ok(session.get_info())
-    }
-    
-    /// 添加交易输出
-    pub fn add_output(&mut self, session_id: &str, req: &OutputRequest) -> Result<CoinJoinSessionInfo, String> {
-        let session = self.get_session_mut(session_id)
-            .ok_or_else(|| format!("会话不存在: {}", session_id))?;
-            
-        if !session.participants.contains(&req.participant_id) {
-            return Err(format!("参与者不在会话中: {}", req.participant_id));
-        }
-        
-        if !session.add_output(req.output.clone()) {
-            return Err(format!("无法添加输出，会话状态: {:?}", session.status));
-        }
-        
-        Ok(session.get_info())
-    }
-    
-    /// 添加交易签名
-    pub fn add_signature(&mut self, session_id: &str, req: &SignatureRequest) -> Result<CoinJoinSessionInfo, String> {
-        let session = self.get_session_mut(session_id)
-            .ok_or_else(|| format!("会话不存在: {}", session_id))?;
-            
-        if !session.participants.contains(&req.participant_id) {
-            return Err(format!("参与者不在会话中: {}", req.participant_id));
-        }
-        
-        if !session.add_signature(req.signature.clone()) {
-            return Err(format!("无法添加签名，会话状态: {:?}", session.status));
-        }
-        
-        Ok(session.get_info())
-    }
-    
-    /// 完成会话
-    pub fn finalize_session(&mut self, session_id: &str, req: &FinalizeRequest) -> Result<CoinJoinSessionInfo, String> {
-        let session = self.get_session_mut(session_id)
-            .ok_or_else(|| format!("会话不存在: {}", session_id))?;
-            
-        if !session.participants.contains(&req.participant_id) {
-            return Err(format!("参与者不在会话中: {}", req.participant_id));
-        }
-        
-        // 在实际实现中，这里应该构建并广播交易
-        // 为了简化，我们假设交易ID是会话ID的哈希
-        let txid = format!("tx-{}", session_id);
-        
-        if !session.complete(&txid) {
-            return Err(format!("无法完成会话，会话状态: {:?}", session.status));
-        }
-        
-        Ok(session.get_info())
-    }
-    
-    /// 清理过期会话
-    pub fn cleanup_expired_sessions(&mut self) {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-            
-        let expired_ids: Vec<String> = self.sessions.iter()
-            .filter(|(_, session)| {
-                now - session.last_active > self.session_timeout
-            })
-            .map(|(id, _)| id.clone())
-            .collect();
-            
-        for id in expired_ids {
-            if let Some(session) = self.sessions.get_mut(&id) {
-                session.status = CoinJoinStatus::TimedOut;
-            }
-            info!("移除过期的CoinJoin会话: {}", id);
-            self.sessions.remove(&id);
-        }
-    }
-}
-
-/// API错误响应
-#[derive(Debug, Serialize)]
-struct ErrorResponse {
-    error: String,
-}
-
-/// 创建CoinJoin会话
-pub async fn create_coinjoin_session(
-    State(manager): State<Arc<Mutex<CoinJoinManager>>>,
-    Json(req): Json<CoinJoinRequest>,
-) -> Response {
-    let result = {
-        let mut manager = manager.lock().unwrap();
-        manager.create_session(&req)
-    };
-    
-    (StatusCode::CREATED, Json(result)).into_response()
-}
-
-/// 获取CoinJoin会话
-pub async fn get_coinjoin_session(
-    State(manager): State<Arc<Mutex<CoinJoinManager>>>,
-    Path(id): Path<String>,
-) -> Response {
-    let result = {
-        let manager = manager.lock().unwrap();
-        manager.get_session(&id)
-    };
-    
-    match result {
-        Some(session) => (StatusCode::OK, Json(session.get_info())).into_response(),
-        None => (
-            StatusCode::NOT_FOUND,
-            Json(ErrorResponse {
-                error: format!("会话不存在: {}", id),
-            }),
-        ).into_response(),
-    }
-}
-
-/// 添加CoinJoin输入
-pub async fn add_coinjoin_input(
-    State(manager): State<Arc<Mutex<CoinJoinManager>>>,
-    Path(id): Path<String>,
-    Json(req): Json<InputRequest>,
-) -> Response {
-    let result = {
-        let mut manager = manager.lock().unwrap();
-        manager.add_input(&id, &req)
-    };
-    
-    match result {
-        Ok(info) => (StatusCode::OK, Json(info)).into_response(),
-        Err(err) => (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse { error: err }),
-        ).into_response(),
-    }
-}
-
-/// 添加CoinJoin输出
-pub async fn add_coinjoin_output(
-    State(manager): State<Arc<Mutex<CoinJoinManager>>>,
-    Path(id): Path<String>,
-    Json(req): Json<OutputRequest>,
-) -> Response {
-    let result = {
-        let mut manager = manager.lock().unwrap();
-        manager.add_output(&id, &req)
-    };
-    
-    match result {
-        Ok(info) => (StatusCode::OK, Json(info)).into_response(),
-        Err(err) => (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse { error: err }),
-        ).into_response(),
-    }
-}
-
-/// 添加CoinJoin签名
-pub async fn add_coinjoin_signature(
-    State(manager): State<Arc<Mutex<CoinJoinManager>>>,
-    Path(id): Path<String>,
-    Json(req): Json<SignatureRequest>,
-) -> Response {
-    let result = {
-        let mut manager = manager.lock().unwrap();
-        manager.add_signature(&id, &req)
-    };
-    
-    match result {
-        Ok(info) => (StatusCode::OK, Json(info)).into_response(),
-        Err(err) => (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse { error: err }),
-        ).into_response(),
-    }
-}
-
-/// 完成CoinJoin会话
-pub async fn finalize_coinjoin_session(
-    State(manager): State<Arc<Mutex<CoinJoinManager>>>,
-    Path(id): Path<String>,
-    Json(req): Json<FinalizeRequest>,
-) -> Response {
-    let result = {
-        let mut manager = manager.lock().unwrap();
-        manager.finalize_session(&id, &req)
-    };
-    
-    match result {
-        Ok(info) => (StatusCode::OK, Json(info)).into_response(),
-        Err(err) => (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse { error: err }),
-        ).into_response(),
-    }
-}
+            return Err(format!("无法添加输入，会

@@ -1,9 +1,8 @@
 use libp2p::{
     core::upgrade,
-    gossipsub::{self, ConfigBuilder, IdentTopic, MessageAuthenticity},
+    gossipsub::{self, ConfigBuilder, IdentTopic, MessageAuthenticity, Behaviour as Gossipsub, Event as GossipsubEvent},
     swarm::SwarmBuilder,
     identity::{self, Keypair, PublicKey},
-    mdns::{self, Config as MdnsConfig},
     noise::{self, Config as NoiseConfig, Keypair as NoiseKeypair, X25519Spec},
     swarm::{Swarm, SwarmEvent, Config as SwarmConfig, NetworkBehaviour},
     tcp::tokio::Transport as TokioTcpTransport,
@@ -11,13 +10,13 @@ use libp2p::{
     PeerId, Transport,
 };
 use crate::tor::{TorConfig, TorConnector};
-use ed25519_dalek::{Signature, Signer};
+use ed25519_dalek::{Signature, Signer, Verifier};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::error::Error;
 use std::time::{Duration, Instant};
 use log::{info, warn, error, debug};
 use serde::{Serialize, Deserialize};
-use bincode;
+use bincode::{serialize, deserialize};
 use parking_lot::Mutex;
 use std::sync::Arc;
 use std::collections::HashMap;
@@ -69,7 +68,7 @@ pub async fn start_p2p(config: Option<P2PConfig>) -> Result<(), Box<dyn Error>> 
 
     // 2. 生成Noise密钥
     let noise_keys = NoiseKeypair::<X25519Spec>::new()
-        .into_authentic(&id_keys)
+        .into_authenticated(&id_keys)
         .map_err(|e| format!("Failed to generate Noise keys: {:?}", e))?;
     
     // 初始化P2P状态
@@ -96,17 +95,22 @@ pub async fn start_p2p(config: Option<P2PConfig>) -> Result<(), Box<dyn Error>> 
             let tor_clone = tor.clone();
             TokioTcpTransport::new(tcp_config)
                 .map(move |socket, addr| {
-                    if TorConnector::is_onion_address(&addr.to_string()) {
-                        debug!("通过Tor连接到.onion地址: {}", addr);
+                    let addr_str = match addr {
+                        libp2p::core::ConnectedPoint::Dialer { address, .. } => address.to_string(),
+                        libp2p::core::ConnectedPoint::Listener { .. } => "listener".to_string(),
+                    };
+                    
+                    if TorConnector::is_onion_address(&addr_str) {
+                        debug!("通过Tor连接到.onion地址: {:?}", addr);
                         Box::pin(async move {
-                            let stream = tor_clone.connect(&addr.to_string()).await?;
+                            let stream = tor_clone.connect(&addr_str).await?;
                             Ok((stream, addr))
                         }) as std::pin::Pin<Box<dyn std::future::Future<Output = Result<(tokio::net::TcpStream, std::net::SocketAddr), std::io::Error>> + Send>>
                     } else if tor_clone.is_enabled() {
                         // 如果启用了Tor，所有连接都通过Tor
-                        debug!("通过Tor连接到地址: {}", addr);
+                        debug!("通过Tor连接到地址: {:?}", addr);
                         Box::pin(async move {
-                            let stream = tor_clone.connect(&addr.to_string()).await?;
+                            let stream = tor_clone.connect(&addr_str).await?;
                             Ok((stream, addr))
                         }) as std::pin::Pin<Box<dyn std::future::Future<Output = Result<(tokio::net::TcpStream, std::net::SocketAddr), std::io::Error>> + Send>>
                     } else {
@@ -136,21 +140,21 @@ pub async fn start_p2p(config: Option<P2PConfig>) -> Result<(), Box<dyn Error>> 
     // 4. 配置优化的gossipsub
     let gossipsub_config = ConfigBuilder::default()
         .max_transmit_size(config.max_message_size)
-        .validate_messages() // 启用消息验证
+        .validation_mode(gossipsub::ValidationMode::Strict) // 使用Strict验证模式
         .peer_score_params(Default::default()) // 启用对等节点评分
         .flood_publish(true)
         .message_id_fn(|message| {
             // 使用更安全的消息ID生成
             let mut hasher = blake3::Hasher::new();
-            hasher.update(&message.source.unwrap_or_default().to_bytes());
+            hasher.update(&message.source.as_ref().map(|p| p.to_bytes()).unwrap_or_default());
             hasher.update(&message.data);
             hasher.update(&message.sequence_number.unwrap_or_default().to_be_bytes());
-            hasher.finalize().into()
+            gossipsub::MessageId::from(hasher.finalize().as_bytes()[..32].to_vec())
         })
         .build()
         .expect("Failed to build Gossipsub config");
 
-    let mut gossipsub = Gossipsub::new(
+    let mut gossipsub = Gossipsub::new_with_message_authenticity(
         MessageAuthenticity::Signed(id_keys.clone()),
         gossipsub_config,
     )
@@ -180,16 +184,19 @@ pub async fn start_p2p(config: Option<P2PConfig>) -> Result<(), Box<dyn Error>> 
     // 5. 构建优化的Swarm
     let mut swarm = {
         let behaviour = gossipsub;
+        let swarm_config = libp2p::swarm::Config::with_tokio_executor()
+            .with_idle_connection_timeout(config.peer_timeout)
+            .with_max_established_incoming_connections(config.max_connections)
+            .with_max_established_outgoing_connections(config.max_connections)
+            .with_dial_concurrency_factor(4)  // 增加并发拨号数
+            .with_notification_buffer_size(32)  // 增加通知缓冲区大小
+            .with_pending_connection_timeout(Duration::from_secs(10))  // 减少挂起连接的超时时间
+            .with_max_negotiating_inbound_streams(8)  // 增加最大协商入站流
+            .with_max_negotiating_outbound_streams(8)  // 增加最大协商出站流
+            .with_connection_event_buffer_size(64);  // 增加连接事件缓冲区大小
+        
         SwarmBuilder::with_tokio_executor(transport, behaviour, peer_id)
-            .idle_connection_timeout(config.peer_timeout)
-            .max_established_incoming_connections(config.max_connections)
-            .max_established_outgoing_connections(config.max_connections)
-            .dial_concurrency_factor(4)  // 增加并发拨号数
-            .notification_buffer_size(32)  // 增加通知缓冲区大小
-            .pending_connection_timeout(Duration::from_secs(10))  // 减少挂起连接的超时时间
-            .max_negotiating_inbound_streams(8)  // 增加最大协商入站流
-            .max_negotiating_outbound_streams(8)  // 增加最大协商出站流
-            .connection_event_buffer_size(64)  // 增加连接事件缓冲区大小
+            .config(swarm_config)
             .build()
     };
 
@@ -202,8 +209,12 @@ pub async fn start_p2p(config: Option<P2PConfig>) -> Result<(), Box<dyn Error>> 
         let state_clone = state.clone();
         
         loop {
-            match swarm.select_next_some().await {
-                SwarmEvent::Behaviour(GossipsubEvent::Message { message, .. }) => {
+            match swarm.next().await {
+                Some(SwarmEvent::Behaviour(GossipsubEvent::Message { 
+                    propagation_source: _,
+                    message_id: _,
+                    message,
+                })) => {
                     // 更新状态
                     let mut state = state_clone.lock();
                     state.message_count += 1;
@@ -217,24 +228,28 @@ pub async fn start_p2p(config: Option<P2PConfig>) -> Result<(), Box<dyn Error>> 
                         warn!("Received invalid P2P message");
                     }
                 },
-                SwarmEvent::NewListenAddr { address, .. } => {
+                Some(SwarmEvent::NewListenAddr { address, .. }) => {
                     info!("Listening on {:?}", address);
                 },
-                SwarmEvent::ConnectionEstablished { peer_id, .. } => {
+                Some(SwarmEvent::ConnectionEstablished { peer_id, .. }) => {
                     info!("Connected to peer: {:?}", peer_id);
                     state_clone.lock().active_peers.insert(peer_id, Instant::now());
                 },
-                SwarmEvent::ConnectionClosed { peer_id, cause, .. } => {
+                Some(SwarmEvent::ConnectionClosed { peer_id, cause, .. }) => {
                     info!("Disconnected from peer: {:?}, cause: {:?}", peer_id, cause);
                     state_clone.lock().active_peers.remove(&peer_id);
                 },
-                SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
+                Some(SwarmEvent::OutgoingConnectionError { peer_id, error, .. }) => {
                     warn!("Failed to connect to peer {:?}: {:?}", peer_id, error);
                 },
-                SwarmEvent::IncomingConnectionError { error, .. } => {
+                Some(SwarmEvent::IncomingConnectionError { error, .. }) => {
                     warn!("Incoming connection error: {:?}", error);
                 },
-                _ => {}
+                Some(_) => {},
+                None => {
+                    // 处理None情况，可能是连接已关闭
+                    warn!("Swarm stream returned None, connection may be closed");
+                }
             }
         }
     });
@@ -284,22 +299,21 @@ impl P2PMessage {
         }
     }
     
-    pub fn sign(&mut self, keypair: &identity::Keypair) -> Result<(), Box<dyn Error>> {
+    pub fn sign(&mut self, keypair: &Keypair) -> Result<(), Box<dyn Error>> {
         let mut data = serialize(&self.payload)?;
         data.extend(self.timestamp.to_be_bytes());
         
         // 使用libp2p内置方法进行签名
         let signature = keypair.sign(&data);
-        self.signature = signature.to_bytes().to_vec();
+        self.signature = signature;
         Ok(())
     }
     
-    pub fn verify(&self, public_key: &identity::PublicKey) -> Result<(), Box<dyn Error>> {
+    pub fn verify(&self, public_key: &PublicKey) -> Result<(), Box<dyn Error>> {
         let mut data = serialize(&self.payload)?;
         data.extend(self.timestamp.to_be_bytes());
         
-        let signature = identity::Signature::try_from(&self.signature[..])?;
-        if !public_key.verify(&data, &signature) {
+        if !public_key.verify(&data, &self.signature) {
             return Err("Signature verification failed".into());
         }
         Ok(())

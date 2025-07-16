@@ -236,112 +236,121 @@ async function saveKeyToLocalStorage() {
 
 // ==================== 账户管理 ====================
 
+async function withExponentialBackoff(fn, maxRetries = 3, baseDelay = 1000) {
+    let retryCount = 0;
+    while (retryCount < maxRetries) {
+        try {
+            return await fn();
+        } catch (error) {
+            retryCount++;
+            if (retryCount >= maxRetries) {
+                throw error;
+            }
+            const delay = baseDelay * Math.pow(2, retryCount);
+            console.warn(`操作失败，${delay}ms 后重试...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
+    }
+}
+
 // 获取账户信息（余额等）
 async function getAccountInfo() {
-  if (!WALLET.publicKey) {
-    showMessage("请先创建或导入密钥", "error");
-    return null;
-  }
-  
-  const cacheKey = `account_${WALLET.publicKey}`;
-  const cacheExpiry = 30 * 1000; // 30秒缓存
-  
-  // 检查缓存
-  if (WALLET.requestCache[cacheKey] && 
-      Date.now() - WALLET.requestCache[cacheKey].timestamp < cacheExpiry) {
-    const cachedData = WALLET.requestCache[cacheKey].data;
-    WALLET.balance = cachedData.balance || 0;
-    WALLET.transactions = cachedData.transactions || [];
-    updateBalanceDisplay();
-    updateTransactionHistory();
-    return cachedData;
-  }
-  
-  // 检查是否已有相同请求正在进行
-  if (WALLET.pendingRequests[cacheKey]) {
-    return new Promise(resolve => {
-      const checkPending = () => {
-        if (!WALLET.pendingRequests[cacheKey] && WALLET.requestCache[cacheKey]) {
-          const cachedData = WALLET.requestCache[cacheKey].data;
-          WALLET.balance = cachedData.balance || 0;
-          WALLET.transactions = cachedData.transactions || [];
-          updateBalanceDisplay();
-          updateTransactionHistory();
-          resolve(cachedData);
-        } else {
-          setTimeout(checkPending, 100);
-        }
-      };
-      checkPending();
-    });
-  }
-  
-  // 标记请求为进行中
-  WALLET.pendingRequests[cacheKey] = true;
-  
-  // 指数退避重试逻辑
-  let retryCount = 0;
-  const maxRetries = 3;
-  const baseDelay = 1000;
-  
-  while (retryCount < maxRetries) {
+    if (!WALLET.publicKey) {
+        showMessage("请先创建或导入密钥", "error");
+        return null;
+    }
+
+    const cacheKey = `account_${WALLET.publicKey}`;
+    const cacheExpiry = 30 * 1000; // 30秒缓存
+
+    // 检查缓存
+    if (WALLET.requestCache[cacheKey] && 
+        Date.now() - WALLET.requestCache[cacheKey].timestamp < cacheExpiry) {
+        const cachedData = WALLET.requestCache[cacheKey].data;
+        WALLET.balance = cachedData.balance || 0;
+        WALLET.transactions = cachedData.transactions || [];
+        updateBalanceDisplay();
+        updateTransactionHistory();
+        return cachedData;
+    }
+
+    // 检查是否已有相同请求正在进行
+    if (WALLET.pendingRequests[cacheKey]) {
+        return new Promise(resolve => {
+            const checkPending = () => {
+                if (!WALLET.pendingRequests[cacheKey] && WALLET.requestCache[cacheKey]) {
+                    const cachedData = WALLET.requestCache[cacheKey].data;
+                    WALLET.balance = cachedData.balance || 0;
+                    WALLET.transactions = cachedData.transactions || [];
+                    updateBalanceDisplay();
+                    updateTransactionHistory();
+                    resolve(cachedData);
+                } else {
+                    setTimeout(checkPending, 100);
+                }
+            };
+            checkPending();
+        });
+    }
+
+    // 标记请求为进行中
+    WALLET.pendingRequests[cacheKey] = true;
+
     try {
-      const response = await fetch(`${WALLET.apiBase}/api/account/${WALLET.publicKey}`);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP错误 ${response.status}`);
-      }
-      
-      const accountData = await response.json();
-      
-      // 更新缓存
-      WALLET.requestCache[cacheKey] = {
-        data: accountData,
-        timestamp: Date.now()
-      };
-      
-      // 更新钱包数据
-      WALLET.balance = accountData.balance || 0;
-      WALLET.transactions = accountData.transactions || [];
-      
-      // 更新UI
-      updateBalanceDisplay();
-      updateTransactionHistory();
-      
-      // 清除进行中标记
-      delete WALLET.pendingRequests[cacheKey];
-      
-      return accountData;
-      
-    } catch (error) {
-      retryCount++;
-      if (retryCount >= maxRetries) {
-        delete WALLET.pendingRequests[cacheKey];
-        console.error("获取账户信息失败:", error);
-        showMessage("获取账户信息失败: " + error.message, "warning");
-        
-        // 如果是新账户，可能还没有在区块链上注册
-        WALLET.balance = 0;
-        WALLET.transactions = [];
-        
+        const accountData = await withExponentialBackoff(async () => {
+            const response = await fetch(`${WALLET.apiBase}/api/account/${WALLET.publicKey}`);
+            if (!response.ok) {
+                throw new Error(`HTTP错误 ${response.status}`);
+            }
+            return await response.json();
+        });
+
+        // 更新缓存
+        WALLET.requestCache[cacheKey] = {
+            data: accountData,
+            timestamp: Date.now()
+        };
+
+        // 更新钱包数据
+        WALLET.balance = accountData.balance || 0;
+        WALLET.transactions = accountData.transactions || [];
+
         // 更新UI
         updateBalanceDisplay();
         updateTransactionHistory();
-        
+
+        return accountData;
+    } catch (error) {
+        console.error("获取账户信息失败:", error);
+        showMessage("获取账户信息失败: " + error.message, "warning");
+
+        // 如果是新账户，可能还没有在区块链上注册
+        WALLET.balance = 0;
+        WALLET.transactions = [];
+
+        // 更新UI
+        updateBalanceDisplay();
+        updateTransactionHistory();
+
         return null;
-      }
-      
-      const delay = baseDelay * Math.pow(2, retryCount);
-      console.warn(`获取账户信息失败，${delay}ms后重试...`);
-      await new Promise(resolve => setTimeout(resolve, delay));
+    } finally {
+        // 清除进行中标记
+        delete WALLET.pendingRequests[cacheKey];
     }
-  }
 }
 
 // ==================== 交易功能 ====================
 
 // 发送交易（转账）
-async function sendTransaction() {
+
+async function sendTransaction(transaction, amount, recipientPublicKey) {
+    const requestId = Date.now().toString();
+    const url = `${WALLET.apiBase}/api/transaction`;
+    
+    // 检查缓存
+    if (WALLET.requestCache[url] && Date.now() - WALLET.requestCache[url].timestamp < 5000) {
+        return true;
+    }
   if (!WALLET.keyPair || !WALLET.publicKey) {
     showMessage("请先创建或导入密钥", "error");
     return false;

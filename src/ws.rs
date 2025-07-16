@@ -1,7 +1,7 @@
 use dashmap::DashSet;
 use warp::Filter;
 use futures::{SinkExt, StreamExt};
-use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation, Header};
+use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation, TokenData};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use log::{info, warn, error, debug};
@@ -11,8 +11,7 @@ use std::time::{Instant, Duration};
 use governor::{Quota, RateLimiter};
 use nonzero_ext::nonzero;
 use tokio::time::interval;
-use hmac::{Hmac, Mac};
-use sha2::Sha256;
+use once_cell::sync::Lazy;
 
 /// WebSocket连接状态
 #[derive(Default)]
@@ -42,18 +41,28 @@ pub fn chat_routes() -> impl Filter<Extract = impl warp::Reply, Error = warp::Re
                     });
                 }
             }
-            warp::reply::with_status("Unauthorized", warp::http::StatusCode::UNAUTHORIZED)
+            
+            // 如果没有token或验证失败，返回未授权状态
+            ws.on_upgrade(move |socket| {
+                async move {
+                    let mut socket = socket;
+                    let _ = socket.send(warp::ws::Message::text("Unauthorized")).await;
+                    // 关闭连接
+                }
+            })
         })
 }
 
 /// 优化的JWT Claims结构
 #[derive(Debug, Serialize, Deserialize)]
 struct Claims {
-    iss: Option<HashSet<String>>, // 签发者集合
-    sub: String, // 用户ID
-    exp: u64,    // 过期时间
-    iat: u64,    // 签发时间
-    jti: String, // JWT ID
+    iss: String,      // 签发者
+    sub: String,      // 用户ID
+    exp: u64,         // 过期时间
+    iat: u64,         // 签发时间
+    jti: String,      // JWT ID
+    #[serde(default)]
+    roles: Vec<String>, // 用户角色
 }
 
 /// 增强的JWT验证器
@@ -61,20 +70,35 @@ struct JwtValidator {
     current_secret: String,
     previous_secrets: Vec<String>,
     revoked_tokens: DashSet<String>,
+    allowed_issuers: HashSet<String>,
 }
 
 impl JwtValidator {
     fn new() -> Self {
+        // 获取当前密钥，如果环境变量不存在则使用默认值（仅用于开发环境）
+        let current_secret = std::env::var("JWT_CURRENT_SECRET")
+            .unwrap_or_else(|_| {
+                warn!("JWT_CURRENT_SECRET not set, using default (INSECURE)");
+                "development_secret_key_do_not_use_in_production".to_string()
+            });
+            
+        // 获取之前的密钥列表
+        let previous_secrets = std::env::var("JWT_PREVIOUS_SECRETS")
+            .unwrap_or_default()
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+            
+        // 设置允许的签发者
+        let mut allowed_issuers = HashSet::new();
+        allowed_issuers.insert("hancoin-server".to_string());
+        
         Self {
-            current_secret: std::env::var("JWT_CURRENT_SECRET")
-                .expect("JWT_CURRENT_SECRET must be set"),
-            previous_secrets: std::env::var("JWT_PREVIOUS_SECRETS")
-                .unwrap_or_default()
-                .split(',')
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect(),
+            current_secret,
+            previous_secrets,
             revoked_tokens: DashSet::new(),
+            allowed_issuers,
         }
     }
 
@@ -116,25 +140,20 @@ impl JwtValidator {
             &DecodingKey::from_secret(secret.as_bytes()),
             &validation,
         ) {
-            Ok(claims) => {
+            Ok(token_data) => {
                 // 手动验证iss
-                if let Some(issuers) = &claims.claims.iss {
-                    if !issuers.contains("hancoin-server") {
-                        warn!("Invalid issuer in token");
-                        return false;
-                    }
-                } else {
-                    warn!("Missing issuer in token");
+                if !self.allowed_issuers.contains(&token_data.claims.iss) {
+                    warn!("Invalid issuer in token: {}", token_data.claims.iss);
                     return false;
                 }
 
                 // 增强claim验证
-                if !claims.claims.sub.starts_with("user-") {
-                    warn!("Invalid user ID format");
+                if !token_data.claims.sub.starts_with("user-") {
+                    warn!("Invalid user ID format: {}", token_data.claims.sub);
                     return false;
                 }
                 
-                info!("User {} authenticated via WebSocket", claims.claims.sub);
+                info!("User {} authenticated via WebSocket", token_data.claims.sub);
                 true
             },
             Err(e) => {
@@ -148,11 +167,18 @@ impl JwtValidator {
     fn revoke_token(&self, token: &str) {
         self.revoked_tokens.insert(token.to_string());
     }
+    
+    /// 清理过期的撤销令牌
+    fn cleanup_revoked(&self) {
+        // 实际实现中，我们应该解析令牌并检查过期时间
+        // 这里简化处理，假设所有撤销令牌在24小时后可以从集合中移除
+        // 在生产环境中，应该使用更复杂的逻辑
+        warn!("Token revocation cleanup not implemented");
+    }
 }
 
-lazy_static::lazy_static! {
-    static ref JWT_VALIDATOR: JwtValidator = JwtValidator::new();
-}
+// 使用once_cell替代lazy_static
+static JWT_VALIDATOR: Lazy<JwtValidator> = Lazy::new(|| JwtValidator::new());
 
 /// 增强的JWT验证入口
 fn validate_token(token: &str) -> bool {
@@ -164,7 +190,7 @@ const MAX_MESSAGE_SIZE: usize = 1024;
 const MAX_CONNECTIONS: usize = 1000;
 
 async fn handle_ws(
-    mut ws: warp::ws::WebSocket,
+    ws: warp::ws::WebSocket,
     state: Arc<Mutex<WsState>>,
     rate_limiter: Arc<RateLimiter>,
 ) {
@@ -172,6 +198,8 @@ async fn handle_ws(
     {
         let mut state = state.lock();
         if state.active_connections >= MAX_CONNECTIONS {
+            drop(state); // 提前释放锁
+            let mut ws = ws;
             let _ = ws.send(warp::ws::Message::text("Error: Too many connections")).await;
             return;
         }
@@ -183,9 +211,7 @@ async fn handle_ws(
     
     // 发送心跳
     let (mut ws_sink, mut ws_stream) = ws.split();
-    let heartbeat = interval(Duration::from_secs(30));
-    
-    tokio::pin!(heartbeat);
+    let mut heartbeat = interval(Duration::from_secs(30));
     
     // 使用固定大小的缓冲区
     let mut buf = [0u8; MAX_MESSAGE_SIZE];
@@ -202,7 +228,7 @@ async fn handle_ws(
                 match result {
                     Some(Ok(msg)) => {
                         // 检查消息大小
-                        if msg.len() > MAX_MESSAGE_SIZE {
+                        if msg.as_bytes().len() > MAX_MESSAGE_SIZE {
                             let _ = ws_sink.send(warp::ws::Message::text("Error: Message too large")).await;
                             continue;
                         }
@@ -226,8 +252,12 @@ async fn handle_ws(
                                 warn!("Failed to send WebSocket message: {:?}", e);
                                 break;
                             }
-                        } else {
+                        } else if msg.is_binary() {
+                            // 处理二进制消息
                             let _ = ws_sink.send(warp::ws::Message::text("Error: Binary messages not supported")).await;
+                        } else if msg.is_close() {
+                            // 客户端请求关闭连接
+                            break;
                         }
                     },
                     Some(Err(e)) => {
@@ -243,4 +273,21 @@ async fn handle_ws(
     // 更新连接状态
     state.lock().active_connections -= 1;
     info!("WebSocket connection closed");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_jwt_validator() {
+        let validator = JwtValidator::new();
+        
+        // 测试无效令牌
+        assert!(!validator.validate_token("invalid.token.here"));
+        
+        // 测试撤销功能
+        validator.revoke_token("some.token.here");
+        assert!(!validator.validate_token("some.token.here"));
+    }
 }

@@ -1,5 +1,5 @@
 use serde::{Serialize, Deserialize};
-use serde_with::skip_serializing;
+use serde_with::{serde_as, skip_serializing_none};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::collections::{VecDeque, HashMap};
@@ -22,7 +22,7 @@ static ACCOUNT_ID_REGEX: Lazy<Regex> = Lazy::new(|| {
 });
 
 // 优化的哈希器实例
-static HASHER: Lazy<XxHash64> = Lazy::new(XxHash64::default);
+static HASHER: Lazy<XxHash64> = Lazy::new(|| XxHash64::default());
 
 /// 验证账户ID格式
 pub fn is_valid_account_id(account_id: &str) -> bool {
@@ -127,7 +127,7 @@ impl Account {
     /// 添加交易引用
     pub fn add_transaction(&mut self, tx_ref: TxRef) {
         // 保持交易历史在100条以内
-        if self.transactions.len() >= 100 {
+        if self.transactions.len() >= MAX_TX_HISTORY {
             self.transactions.pop_front();
         }
         self.transactions.push_back(tx_ref);
@@ -205,18 +205,20 @@ pub struct Comment {
 }
 
 /// 优化的账本结构体
+#[serde_as]
+#[derive(Serialize, Deserialize)]
 pub struct Ledger {
     pub accounts: Arc<DashMap<String, Account>>,
     pub issued: AtomicU64,
     pub transactions: Arc<DashMap<String, Tx>>,
     pub moments: Arc<DashMap<String, Moment>>,
     // 添加缓存优化频繁访问的数据
-    #[skip_serializing]
+    #[serde(skip)]
     pub cache: Arc<RwLock<LruCache<String, Account>>>,
     // 缓存统计
-    #[skip_serializing]
+    #[serde(skip)]
     pub cache_hits: AtomicU64,
-    #[skip_serializing]
+    #[serde(skip)]
     pub cache_misses: AtomicU64,
 }
 
@@ -237,14 +239,26 @@ impl Default for Ledger {
 impl Ledger {
     /// 创建新的账本实例
     pub fn new() -> Self {
-        Self {
-            accounts: Arc::new(DashMap::new()),
-            issued: AtomicU64::new(0),
-            transactions: Arc::new(DashMap::new()),
-            moments: Arc::new(DashMap::new()),
-            cache: Arc::new(RwLock::new(LruCache::new(1000))), // 缓存1000个账户
-            cache_hits: AtomicU64::new(0),
-            cache_misses: AtomicU64::new(0),
+        Self::default()
+    }
+
+    /// 获取账户信息，优先使用缓存
+    pub fn get_account(&self, account_id: &str) -> Option<Account> {
+        let cache = self.cache.read();
+        if let Some(account) = cache.get(account_id) {
+            self.cache_hits.fetch_add(1, Ordering::Relaxed);
+            return Some(account.clone());
+        }
+        self.cache_misses.fetch_add(1, Ordering::Relaxed);
+
+        drop(cache);
+
+        if let Some(account) = self.accounts.get(account_id) {
+            let mut cache = self.cache.write();
+            cache.put(account_id.to_string(), account.clone());
+            Some(account.clone())
+        } else {
+            None
         }
     }
     
@@ -255,17 +269,15 @@ impl Ledger {
         // 先从缓存中获取
         let mut cache_miss = Vec::new();
         {
-            if let Ok(cache) = self.cache.read() {
-                for id in account_ids {
-                    if let Some(account) = cache.peek(id) {
-                        result.insert(id.clone(), account.clone());
-                    } else {
-                        cache_miss.push(id.clone());
-                    }
+            let cache = self.cache.read();
+            for id in account_ids {
+                if let Some(account) = cache.get(id) {
+                    result.insert(id.clone(), account.clone());
+                    self.cache_hits.fetch_add(1, Ordering::Relaxed);
+                } else {
+                    cache_miss.push(id.clone());
+                    self.cache_misses.fetch_add(1, Ordering::Relaxed);
                 }
-            } else {
-                // 如果无法获取缓存锁，所有ID都视为缓存未命中
-                cache_miss = account_ids.to_vec();
             }
         }
         
@@ -276,9 +288,8 @@ impl Ledger {
                 result.insert(id.clone(), account_clone.clone());
                 
                 // 更新缓存
-                if let Ok(mut cache) = self.cache.write() {
-                    cache.put(id, account_clone);
-                }
+                let mut cache = self.cache.write();
+                cache.put(id, account_clone);
             }
         }
         
@@ -338,4 +349,36 @@ mod tests {
         assert_eq!(batch.len(), 1);
         assert_eq!(batch[&account_id].balance, account.balance);
     }
+}
+
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum HancoinError {
+    #[error("Missing account_id")]
+    MissingAccountId,
+    #[error("Missing signature")]
+    MissingSignature,
+    #[error("Invalid account_id format")]
+    InvalidAccountIdFormat,
+    #[error("Invalid public key")]
+    InvalidPublicKey,
+    #[error("Invalid signature format")]
+    InvalidSignatureFormat,
+    #[error("Invalid signature data")]
+    InvalidSignatureData,
+    #[error("Invalid signature")]
+    InvalidSignature,
+    #[error("System time error")]
+    SystemTimeError,
+    #[error("Faucet cooldown period not over")]
+    FaucetCooldownNotOver,
+    #[error("Total supply limit reached")]
+    TotalSupplyLimitReached,
+    #[error("Account not found")]
+    AccountNotFound,
+    #[error("Invalid transaction")]
+    InvalidTransaction,
+    #[error("Session not found: {0}")]
+    SessionNotFound(String),
 }

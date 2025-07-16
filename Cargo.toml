@@ -3,6 +3,15 @@ name = "hancoin"
 version = "0.1.0"
 edition = "2021"
 
+# 启用基准测试
+[lib]
+name = "hancoin"
+path = "src/lib.rs"
+
+[[bench]]
+name = "crypto_bench"
+harness = false
+
 [dependencies]
 # 网络通信
 libp2p = { version = "0.56.0", features = ["gossipsub", "tcp", "dns", "websocket", "tokio", "noise", "yamux", "mdns"] }
@@ -73,3 +82,7 @@ data-encoding = "2.5.0"
 # 校验和计算
 crc = "3.0.1"
 serde_with = "3.14.0"
+
+[dev-dependencies]
+# 基准测试框架
+criterion = { version = "0.5.1", features = ["html_reports", "async_tokio"] }
