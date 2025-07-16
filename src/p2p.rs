@@ -1,4 +1,5 @@
 use libp2p::{
+use libp2p::swarm::SwarmBuilder;
     core::upgrade,
     gossipsub::{self, ConfigBuilder, IdentTopic, MessageAuthenticity, Behaviour as Gossipsub, Event as GossipsubEvent},
     swarm::SwarmBuilder,

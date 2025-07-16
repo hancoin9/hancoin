@@ -1,6 +1,6 @@
 use serde::{Serialize, Deserialize};
 use serde_with::{serde_as, skip_serializing_none};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use std::collections::{VecDeque, HashMap};
 use log::{warn, info, debug, error};

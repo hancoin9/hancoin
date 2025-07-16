@@ -28,7 +28,7 @@ serde_bytes = "0.11.17"
 bincode = "2.0.0"
 
 # 加密与安全
-ed25519-dalek = { version = "2.1.1", features = ["rand_core"] }
+ed25519-dalek = "2.1.1"
 jsonwebtoken = "9.3.1"
 hex = "0.4.3"
 sha2 = "0.10.9"
@@ -39,7 +39,6 @@ blake3 = "1.5.0"
 
 # 随机数生成
 rand = "0.8.5"
-rand_core = "0.6.4"
 
 # 日志与错误处理
 log = "0.4.21"
