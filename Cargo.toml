@@ -8,10 +8,6 @@ edition = "2021"
 name = "hancoin"
 path = "src/lib.rs"
 
-[[bench]]
-name = "crypto_bench"
-harness = false
-
 [dependencies]
 # 网络通信
 libp2p = { version = "0.56.0", features = ["gossipsub", "tcp", "dns", "websocket", "tokio", "noise", "yamux", "mdns"] }

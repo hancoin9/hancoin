@@ -438,4 +438,4 @@ impl CoinJoinManager {
         }
         
         if !session.add_input(req.input.clone()) {
-            return Err(format!("无法添加输入，会
+            return Err(format!("无法添加输入，会话状态不正确"));

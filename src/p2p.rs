@@ -1,8 +1,7 @@
 use libp2p::{
-use libp2p::swarm::SwarmBuilder;
-    core::upgrade,
-    gossipsub::{self, ConfigBuilder, IdentTopic, MessageAuthenticity, Behaviour as Gossipsub, Event as GossipsubEvent},
     swarm::SwarmBuilder,
+    core::upgrade,
+    gossipsub::{Behaviour as Gossipsub, ConfigBuilder as GossipsubConfigBuilder, IdentTopic, MessageAuthenticity, Event as GossipsubEvent},
     identity::{self, Keypair, PublicKey},
     noise::{self, Config as NoiseConfig, Keypair as NoiseKeypair, X25519Spec},
     swarm::{Swarm, SwarmEvent, Config as SwarmConfig, NetworkBehaviour},
@@ -139,7 +138,7 @@ pub async fn start_p2p(config: Option<P2PConfig>) -> Result<(), Box<dyn Error>> 
     };
 
     // 4. 配置优化的gossipsub
-    let gossipsub_config = ConfigBuilder::default()
+    let gossipsub_config = GossipsubConfigBuilder::default()
         .max_transmit_size(config.max_message_size)
         .validation_mode(gossipsub::ValidationMode::Strict) // 使用Strict验证模式
         .peer_score_params(Default::default()) // 启用对等节点评分
